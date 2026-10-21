@@ -10,5 +10,5 @@ services:
         VITE_API_URL: ${VITE_API_URL}
         VITE_APP_NAME: ${VITE_APP_NAME}
     ports:
-      - "5000:80"
+      - "5015:80"
     restart: unless-stopped
