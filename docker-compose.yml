@@ -1,5 +1,4 @@
-version: "3.8"
-
+name: sibssnapsclient
 
 services:
   web:
@@ -7,8 +6,12 @@ services:
     build:
       context: .
       args:
-        VITE_API_URL: ${VITE_API_URL}
-        VITE_APP_NAME: ${VITE_APP_NAME}
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_APP_NAME: ${VITE_APP_NAME:-SiBS Snaps}
     ports:
       - "5015:80"
+    # Separate Client / Server Compose stacks communicate via the Docker host.
+    # Required on Linux so nginx.conf can resolve host.docker.internal:6101.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
