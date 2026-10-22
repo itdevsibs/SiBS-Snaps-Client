@@ -1,0 +1,9 @@
+# Never copy Jenkins-managed environment files into image build layers.
+.env
+.env.*
+!.env.example
+node_modules
+dist
+.git
+.gitignore
+*.log
