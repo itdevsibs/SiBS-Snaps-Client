@@ -1,0 +1,192 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+.snap-mod{min-height:100dvh;background:#eff3fa;color:#14294d;font-family:'Plus Jakarta Sans',system-ui,sans-serif;padding:0 20px 60px}
+.snap-mod *{box-sizing:border-box}.snap-mod button,.snap-mod input{font:inherit}
+.snap-mod-wrap{max-width:1250px;margin:auto}.snap-mod-head{height:88px;display:flex;align-items:center;gap:22px;justify-content:space-between;border-bottom:1px solid #dfe7f2}
+.snap-mod-mark{font-size:26px;font-weight:800;display:flex;align-items:center;gap:10px;white-space:nowrap}.snap-mod-blue{color:#1d70c7}
+.snap-mod-heading{display:flex;align-items:center;gap:9px;font-weight:800;color:#334e78}.snap-mod-out,.snap-mod-refresh{border:1px solid #d5e0ee;background:white;color:#234777;border-radius:10px;display:inline-flex;align-items:center;gap:8px;padding:11px 17px;cursor:pointer}
+.snap-mod-login{background:#fff;border:1px solid #dce6f4;border-radius:22px;max-width:470px;margin:66px auto;padding:34px;box-shadow:0 18px 55px #172e5720}
+.snap-mod-shield{background:#e9f1ff;border-radius:18px;display:grid;place-items:center;color:#215cba;width:64px;height:64px}
+.snap-mod-login h1{margin:22px 0 6px;font-size:27px}.snap-mod-login p,.snap-mod-intro p{color:#73829a;line-height:1.7;font-size:13px}
+.snap-mod-login form{display:grid;gap:16px;margin-top:25px}.snap-mod-login label{font-size:12px;font-weight:800;display:grid;gap:7px}
+.snap-mod-login input{border:1px solid #cad8e9;padding:13px;border-radius:11px;outline-color:#2456b5;min-width:0}
+.snap-mod-primary{padding:14px;background:#1d57ad;color:#fff;border:none;border-radius:11px;font-weight:800;cursor:pointer}.snap-mod-primary:disabled{opacity:.65}
+.snap-mod-intro{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:27px 0 18px}.snap-mod-intro h1{margin:0;font-size:28px}
+.snap-mod-tabs{display:flex;gap:10px;border-bottom:1px solid #d5e1ee;margin-bottom:22px;overflow:auto}.snap-mod-tabs button{padding:14px 16px;border:0;border-bottom:3px solid transparent;background:transparent;cursor:pointer;font-weight:800;color:#67819f;white-space:nowrap}.snap-mod-tabs button.active{border-color:#1d57ad;color:#154485}.snap-mod-tabs span{background:#dfe8f5;padding:4px 8px;border-radius:30px;margin-left:5px;font-size:12px}
+.snap-mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:17px}.snap-mod-card{background:#fff;border:1px solid #e1e9f3;border-radius:17px;overflow:hidden;box-shadow:0 8px 24px #0c214512;display:flex;flex-direction:column}.snap-mod-image{height:230px;background:#dce6f3;display:grid;place-items:center}.snap-mod-image img{height:100%;width:100%;object-fit:contain}.snap-mod-info{padding:16px;flex:1;overflow-wrap:anywhere}.snap-mod-event{font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:#2463b4;font-size:10px}.snap-mod-info h2{font-size:17px;margin:8px 0 3px}.snap-mod-info time,.snap-mod-info small{font-size:11px;color:#8392a7}.snap-mod-info p{font-size:14px;line-height:1.5;color:#334663}.snap-mod-info small{display:block;margin-top:12px}
+.snap-mod-actions{display:flex;gap:8px;padding:13px 16px;border-top:1px solid #ebeff6}.snap-mod-actions button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 8px;border-radius:9px;font-weight:800;font-size:12px;cursor:pointer}.snap-mod-approve{background:#137c5d;border:1px solid #137c5d;color:#fff}.snap-mod-reject{background:#fff2f3;border:1px solid #ffcbd0;color:#ba3041}.snap-mod-actions button:disabled{opacity:.6}
+.snap-mod-alert,.snap-mod-success{padding:13px 15px;border-radius:12px;margin:16px 0;font-size:13px}.snap-mod-alert{background:#ffe8e9;border:1px solid #ffcbd0;color:#9b2533}.snap-mod-success{background:#e1f6eb;border:1px solid #b6e7ce;color:#147351}
+.snap-mod-empty{display:flex;align-items:center;justify-content:center;gap:15px;flex-direction:column;padding:70px 15px;color:#7b8ea9}.snap-mod-more{display:block;background:#fff;border:1px solid #cad7e8;color:#2457a9;margin:24px auto;border-radius:10px;padding:13px 22px;cursor:pointer}
+@keyframes snap-mod-spin{to{transform:rotate(360deg)}}.snap-mod-spin{animation:snap-mod-spin 1s linear infinite}
+@media(max-width:600px){.snap-mod{padding:0 13px 45px}.snap-mod-head{height:auto;min-height:83px;flex-wrap:wrap;padding:13px 0}.snap-mod-mark{font-size:19px}.snap-mod-heading{font-size:12px}.snap-mod-out{padding:9px}.snap-mod-intro h1{font-size:24px}.snap-mod-login{margin:35px auto;padding:23px}.snap-mod-grid{grid-template-columns:1fr}.snap-mod-tabs{gap:0}.snap-mod-tabs button{padding:12px 8px}}
+
+/* SiBS HRIS-style moderator login details; dashboard remains unchanged. */
+.snap-mod-login-brand{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;border-bottom:1px solid #e6edf7;padding-bottom:17px;font-weight:800;font-size:12px;color:#254e86}
+.snap-mod-login-brand img{width:130px;height:57px;object-fit:contain;object-position:left center;max-width:58%}
+.snap-mod-password-field{position:relative;display:block}
+.snap-mod-password-field input{display:block;width:100%;padding-right:51px}
+.snap-mod-password-field button{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:39px;height:38px;display:grid;place-items:center;border:0;background:transparent;color:#667fa5;cursor:pointer;border-radius:9px}
+.snap-mod-password-field button:hover{background:#eef4ff;color:#174989}
+
+/* Moderator-only, authenticated JPG download on every review status. */
+.snap-mod-download-row{padding:10px 16px 14px;border-top:1px solid #ebeff6}
+.snap-mod-download-row button{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;border-radius:9px;background:#e9f2ff;border:1px solid #bed3ef;color:#194987;padding:11px 12px;font-size:12px;font-weight:800;cursor:pointer;transition:background .15s}
+.snap-mod-download-row button:hover:not(:disabled){background:#d7e8ff}
+.snap-mod-download-row button:disabled{opacity:.55;cursor:wait}
+
+
+/* In-app moderator rejection confirmation. Does not modify review cards. */
+.snap-mod-modal-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(9,22,46,.66);backdrop-filter:blur(5px);animation:snap-mod-modal-in .18s ease-out}
+.snap-mod-reject-dialog{width:min(100%,485px);max-height:calc(100dvh - 40px);overflow:auto;overscroll-behavior:contain;border-radius:20px;background:#fff;color:#14294d;padding:25px;box-shadow:0 28px 85px rgba(7,24,54,.36);animation:snap-mod-dialog-in .2s ease-out}
+.snap-mod-reject-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.snap-mod-reject-icon{display:grid;place-items:center;width:48px;height:48px;flex:none;border-radius:15px;background:#fff0f0;color:#c13e4e}
+.snap-mod-reject-close{height:36px;width:36px;flex:none;display:grid;place-items:center;background:#fff;border:1px solid #dce5f1;border-radius:10px;color:#60718a;cursor:pointer}
+.snap-mod-reject-close:hover:not(:disabled){background:#f1f5fb;color:#173760}
+.snap-mod-reject-dialog h2{margin:0 0 10px;font-size:22px;letter-spacing:-.5px}
+.snap-mod-reject-description{margin:0 0 19px;line-height:1.65;color:#63738d;font-size:13px}
+.snap-mod-reject-preview{display:flex;align-items:center;gap:15px;border:1px solid #e2eaf4;border-radius:13px;background:#f7f9fd;padding:12px;min-width:0}
+.snap-mod-reject-preview img{width:94px;height:100px;border-radius:9px;object-fit:contain;background:#dce6f3;flex:none}
+.snap-mod-reject-details{min-width:0;flex:1;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}
+.snap-mod-reject-details span{font-size:10px;letter-spacing:1px;font-weight:800;color:#4c77b5}
+.snap-mod-reject-details strong{font-size:15px;line-height:1.3}
+.snap-mod-reject-details p{font-size:12px;color:#3d5272;line-height:1.5;margin:0;max-height:58px;overflow:auto}
+.snap-mod-reject-details small{font-size:11px;color:#8190a6}
+.snap-mod-reject-footer{display:flex;align-items:center;gap:10px;margin-top:22px}
+.snap-mod-reject-footer button{flex:1;min-height:43px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:10px;cursor:pointer;font-weight:800;font-size:13px;padding:10px 14px}
+.snap-mod-reject-cancel{border:1px solid #d6e0ed;background:#fff;color:#244c7b}
+.snap-mod-reject-cancel:hover:not(:disabled){background:#f3f7fd}
+.snap-mod-reject-confirm{border:1px solid #bd3046;background:#bc3046;color:white}
+.snap-mod-reject-confirm:hover:not(:disabled){background:#a42639}
+.snap-mod-reject-footer button:disabled,.snap-mod-reject-close:disabled{opacity:.55;cursor:wait}
+.snap-mod-reject-alert{margin:14px 0 0}
+.snap-mod-reject-dialog button:focus-visible{outline:3px solid #7faee8;outline-offset:3px}
+@keyframes snap-mod-modal-in{from{opacity:0}to{opacity:1}}
+@keyframes snap-mod-dialog-in{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:500px){.snap-mod-reject-dialog{padding:19px;border-radius:17px}.snap-mod-reject-preview{gap:12px}.snap-mod-reject-preview img{width:80px;height:95px}.snap-mod-reject-footer{gap:8px}}
+@media(prefers-reduced-motion:reduce){.snap-mod-modal-backdrop,.snap-mod-reject-dialog{animation:none}}
+
+/* Approved/Rejected actions: permanent deletion only through moderator login. */
+.snap-mod-bulk-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0;color:#65758d;font-size:12px}
+.snap-mod-delete-all,.snap-mod-delete-row button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #efb4be;background:#fff3f5;color:#af2c42;border-radius:10px;padding:11px 15px;font-size:12px;font-weight:800;cursor:pointer}
+.snap-mod-delete-all:hover:not(:disabled),.snap-mod-delete-row button:hover:not(:disabled){background:#ffe4e9}
+.snap-mod-delete-all:disabled,.snap-mod-delete-row button:disabled{opacity:.55;cursor:wait}
+.snap-mod-delete-row{border-top:1px solid #ebeff6;padding:0 16px 14px}
+.snap-mod-delete-row button{width:100%}
+.snap-mod-cleanup-retry{display:flex;align-items:center;gap:8px;margin:9px 0;padding:10px 14px;background:#fff5df;color:#855500;border:1px solid #f3d295;border-radius:10px;font-weight:750;cursor:pointer}
+.snap-mod-delete-icon{background:#fff0f2;color:#bb2943}
+.snap-mod-delete-dialog h2{line-height:1.3}
+.snap-mod-delete-phrase{padding:16px;background:#fff7f8;border:1px solid #f5cbd1;border-radius:12px;display:flex;flex-direction:column;gap:9px;font-size:13px}
+.snap-mod-delete-phrase strong{color:#b72d44}
+.snap-mod-delete-phrase label{color:#526780}
+.snap-mod-delete-phrase input{border:1px solid #cbd7e8;border-radius:9px;min-height:43px;padding:10px 12px;font:inherit;background:white;color:#182e4c}
+.snap-mod-delete-phrase input:focus{outline:2px solid #7ca7e8;outline-offset:1px}
+@media(max-width:600px){.snap-mod-delete-all{width:100%}.snap-mod-bulk-actions{align-items:stretch}}
+
+
+/* Consistent moderator photo cards. Photos must NEVER overlap the caption. */
+.snap-mod .snap-mod-card{
+  min-width:0;
+  isolation:isolate;
+  background:#ffffff;
+  align-self:stretch;
+}
+.snap-mod .snap-mod-card > .snap-mod-image{
+  position:relative;
+  display:block;
+  width:100%;
+  height:244px;
+  flex:0 0 244px;
+  min-height:0;
+  overflow:hidden;
+  isolation:isolate;
+  background:#e9eff8;
+  border-bottom:1px solid #e0e8f2;
+}
+.snap-mod .snap-mod-card > .snap-mod-image > img{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  max-width:100%;
+  max-height:100%;
+  display:block;
+  object-fit:contain;
+  object-position:center;
+}
+.snap-mod .snap-mod-card > .snap-mod-info{
+  position:relative;
+  z-index:1;
+  flex:1 1 auto;
+  min-width:0;
+  padding:16px 16px 14px;
+  background:#ffffff;
+  color:#14294d;
+  overflow-wrap:anywhere;
+}
+.snap-mod .snap-mod-info > .snap-mod-event{
+  display:block;
+  margin:0 0 6px;
+  line-height:1.4;
+}
+.snap-mod .snap-mod-info > h2{
+  margin:0 0 5px;
+  font-size:16px;
+  font-weight:800;
+  line-height:1.4;
+  color:#14294d;
+}
+.snap-mod .snap-mod-info > time{
+  display:block;
+  margin-bottom:12px;
+  font-size:11px;
+  line-height:1.5;
+  color:#6a7e9b;
+}
+.snap-mod .snap-mod-caption-box{
+  width:100%;
+  padding:12px 13px;
+  background:#f4f7fc;
+  border:1px solid #e1e9f4;
+  border-radius:11px;
+  color:#1a355a;
+}
+.snap-mod .snap-mod-caption-label{
+  display:block;
+  margin-bottom:6px;
+  color:#4773a9;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.65px;
+  text-transform:uppercase;
+}
+.snap-mod .snap-mod-caption-text{
+  margin:0;
+  color:#203954;
+  font-size:13px;
+  font-weight:600;
+  line-height:1.65;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  max-height:8.25em;
+  overflow-y:auto;
+  scrollbar-width:thin;
+}
+.snap-mod .snap-mod-reviewed{
+  display:block;
+  margin-top:12px;
+  color:#6c7e99;
+  font-size:11px;
+  line-height:1.5;
+}
+.snap-mod .snap-mod-card > .snap-mod-actions,
+.snap-mod .snap-mod-card > .snap-mod-download-row,
+.snap-mod .snap-mod-card > .snap-mod-delete-row{
+  position:relative;
+  z-index:1;
+  background:#ffffff;
+  flex-shrink:0;
+}
+@media(max-width:600px){
+  .snap-mod .snap-mod-card > .snap-mod-image{height:265px;flex-basis:265px}
+  .snap-mod .snap-mod-card > .snap-mod-info{padding:15px}
+}
