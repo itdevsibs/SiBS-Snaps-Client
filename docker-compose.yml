@@ -1,16 +1,14 @@
+version: "3.8"
+
+
 services:
   web:
     container_name: SiBS-Snaps-Client
     build:
       context: .
       args:
-        VITE_API_URL: ${VITE_API_URL:-}
-        VITE_APP_NAME: ${VITE_APP_NAME:-SiBS Snaps}
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_APP_NAME: ${VITE_APP_NAME}
     ports:
       - "5000:80"
-    # Connect nginx to the SiBS-Snaps-Server Compose host port (default 6101).
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      SNAPS_API_UPSTREAM: ${SNAPS_API_UPSTREAM:-http://host.docker.internal:6101}
     restart: unless-stopped

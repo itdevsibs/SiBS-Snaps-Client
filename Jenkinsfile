@@ -1,6 +1,7 @@
 pipeline {
     agent any
 
+
     stages {
         stage('Checkout') {
             steps {
@@ -8,13 +9,13 @@ pipeline {
             }
         }
 
+
         stage('Prepare Docker Project Env') {
             steps {
-                // Matches the SiBS HRIS pattern: Jenkins owns the environment
-                // file. No .env needs to be committed to the Client repository.
                 sh 'cp /var/jenkins_home/env-files/sibs-snaps-client.env "$WORKSPACE/.env"'
             }
         }
+
 
         stage('Build and Deploy') {
             steps {
@@ -23,6 +24,7 @@ pipeline {
             }
         }
     }
+
 
     post {
         always {
