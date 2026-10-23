@@ -39,7 +39,7 @@ export function createQrWallApi(http) {
     moderatorLogin: (sibsId, password) => request(http.post(`${prefix}/moderator/login`, { sibsId, password })),
     moderatorMe: () => request(http.get(`${prefix}/moderator/me`)),
     moderatorLogout: () => request(http.post(`${prefix}/moderator/logout`, {})),
-    moderatorPhotos: (status = 'pending', before = null) => request(http.get(`${prefix}/moderator/photos`, { params: { status, ...(before ? { before } : {}) } })),
+    moderatorPhotos: (status = 'pending', before = null, page = 1, limit = 25) => request(http.get(`${prefix}/moderator/photos`, { params: { status, ...(before ? { before } : {}), ...(page ? { page } : {}), ...(limit ? { limit } : {}) } })),
     moderatorDecision: (id, decision) => request(http.post(`${prefix}/moderator/photos/${encodeURIComponent(id)}/decision`, { decision })),
     moderatorDelete: id => request(http.delete(`${prefix}/moderator/photos/${encodeURIComponent(id)}`)),
     moderatorDeleteBatch: (status, upToId = null) => request(http.delete(`${prefix}/moderator/photos`, {
