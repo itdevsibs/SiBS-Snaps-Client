@@ -788,11 +788,14 @@ textarea.qrw-field { resize:vertical; }
 .qrw-composer-actions {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 .qrw-composer-action-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: 1;
   gap: 8px;
   background: transparent;
   border: 0;

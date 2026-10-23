@@ -685,7 +685,7 @@ export default function QRWallJoinPage({ api, token }) {
                   aria-label="Add a photo"
                 >
                   <ImagePlus size={18} className="qrw-composer-action-icon" />
-                  <span>Photo</span>
+                  <span>Upload Photo Here</span>
                 </button>
               </div>
             </div>
