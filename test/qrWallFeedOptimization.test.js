@@ -258,6 +258,7 @@ test('12. desktop & mobile: generates valid srcSet and sizes for responsive view
   const photo = {
     id: 77,
     images: {
+      thumbnail: 'https://cdn.example.com/photos/thumb_360.webp',
       feed: 'https://cdn.example.com/photos/feed_720.webp',
       large: 'https://cdn.example.com/photos/large_1440.webp',
       width: 1440,
@@ -266,9 +267,10 @@ test('12. desktop & mobile: generates valid srcSet and sizes for responsive view
   };
 
   const variants = resolveImageVariants(photo);
-  assert.ok(variants.srcSet.includes('https://cdn.example.com/photos/feed_720.webp 720w'));
-  assert.ok(variants.srcSet.includes('https://cdn.example.com/photos/large_1440.webp 1440w'));
-  assert.equal(variants.sizes, '(max-width: 640px) 100vw, 520px');
+  assert.ok(variants.srcSet.includes('https://cdn.example.com/photos/thumb_360.webp 360w'));
+  assert.ok(variants.srcSet.includes('https://cdn.example.com/photos/feed_720.webp 960w'));
+  assert.ok(!variants.srcSet.includes('large_1440.webp'));
+  assert.equal(variants.sizes, '(max-width: 640px) calc(100vw - 32px), 520px');
   assert.equal(variants.aspectRatio, '1440 / 960');
 });
 

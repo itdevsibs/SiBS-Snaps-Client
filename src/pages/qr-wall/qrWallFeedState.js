@@ -139,12 +139,14 @@ export function resolveImageVariants(photo, fallbackUrl = '') {
     aspectRatio = `${images.width} / ${images.height}`;
   }
 
-  // Build responsive srcSet only when distinct variants exist and it's not a GIF
+  // Feed cards never need the 1600px viewer asset. On high-density phones,
+  // including it here makes the browser download it even though the card is
+  // only about 360px wide.
   let srcSet = undefined;
   let sizes = undefined;
-  if (!isGif && images?.feed && images?.large && images.feed !== images.large) {
-    srcSet = `${images.feed} 720w, ${images.large} 1440w`;
-    sizes = '(max-width: 640px) 100vw, 520px';
+  if (!isGif && images?.thumbnail && images?.feed && images.thumbnail !== images.feed) {
+    srcSet = `${images.thumbnail} 360w, ${images.feed} 960w`;
+    sizes = '(max-width: 640px) calc(100vw - 32px), 520px';
   }
 
   return {

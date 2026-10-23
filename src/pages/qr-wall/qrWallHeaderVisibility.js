@@ -20,3 +20,8 @@ export function isMeaningfulHeaderScroll(previousY, currentY) {
   return safeCurrentY <= TOP_VISIBLE_OFFSET
     || Math.abs(safeCurrentY - safePreviousY) >= DIRECTION_CHANGE_OFFSET;
 }
+
+export function getHeaderPresentationClass({ visible, modalOpen }) {
+  const visibilityClass = visible ? 'is-visible' : 'is-hidden';
+  return modalOpen ? `${visibilityClass} is-suspended` : visibilityClass;
+}

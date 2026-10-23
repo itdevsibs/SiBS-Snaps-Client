@@ -1,8 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CameraOff, Heart, RotateCcw, UserRound } from 'lucide-react';
-import { shouldPlayCelebratePop } from '../../pages/qr-wall/qrWallDisplayState';
+import { CameraOff, Heart, Loader2, RotateCcw, UserRound } from 'lucide-react';
+import {
+  getDoubleTapHeartTone,
+  shouldPlayCelebratePop,
+  shouldShowDoubleTapBurst,
+} from '../../pages/qr-wall/qrWallDisplayState';
 import { resolveImageVariants } from '../../pages/qr-wall/qrWallFeedState';
 import { splitCaption } from './captionText';
+import { getPhotoLoadStatus, shouldShowPhotoLoader } from './photoLoadingState';
 
 function dateLabel(value) {
   if (!value) return '';
@@ -23,9 +28,13 @@ function PhotoPost({
 }) {
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
   const [reactionPopSequence, setReactionPopSequence] = useState(0);
   const [showBigHeart, setShowBigHeart] = useState(false);
   const [bigHeartKey, setBigHeartKey] = useState(0);
+  const [bigHeartTone, setBigHeartTone] = useState('react-fill');
+  const [showBigHeartBurst, setShowBigHeartBurst] = useState(false);
 
   const clickTimerRef = useRef(null);
   const lastClickTimeRef = useRef(0);
@@ -47,6 +56,7 @@ function PhotoPost({
 
   const {
     feedSrc,
+    thumbSrc,
     srcSet,
     sizes,
   } = resolveImageVariants(photo, imageUrl);
@@ -56,6 +66,8 @@ function PhotoPost({
     setPrevSrc(feedSrc);
     setAttempt(0);
     setFailed(false);
+    setLoaded(false);
+    setPreviewLoaded(false);
   }
 
   // A temporary read error must not leave a broken-image icon forever.
@@ -65,6 +77,7 @@ function PhotoPost({
     const timer = window.setTimeout(() => {
       setAttempt(current => current + 1);
       setFailed(false);
+      setLoaded(false);
     }, delays[attempt]);
     return () => window.clearTimeout(timer);
   }, [failed, attempt]);
@@ -73,14 +86,19 @@ function PhotoPost({
     if (e && e.stopPropagation) e.stopPropagation();
     setAttempt(current => current + 1);
     setFailed(false);
+    setLoaded(false);
   };
 
   const activeSrc = attempt > 0
     ? `${feedSrc}${feedSrc.includes('?') ? '&' : '?'}retry=${attempt}`
     : feedSrc;
+  const loadStatus = getPhotoLoadStatus({ loaded, failed });
+  const showLoader = shouldShowPhotoLoader({ loaded, failed, previewLoaded });
 
-  const triggerBigHeart = () => {
+  const triggerBigHeart = (tone, showBurst) => {
     setBigHeartKey(key => key + 1);
+    setBigHeartTone(tone);
+    setShowBigHeartBurst(showBurst);
     setShowBigHeart(true);
     if (bigHeartTimeoutRef.current) {
       clearTimeout(bigHeartTimeoutRef.current);
@@ -116,7 +134,7 @@ function PhotoPost({
       clickTimerRef.current = null;
     }
 
-    triggerBigHeart();
+    triggerBigHeart(getDoubleTapHeartTone(photo), shouldShowDoubleTapBurst(photo));
     void toggleCelebrate();
   };
 
@@ -222,10 +240,22 @@ function PhotoPost({
         }}
         aria-label={onOpenViewer && !failed ? `View full photo by ${photo.uploadedBy}` : undefined}
       >
+        {showLoader ? (
+          <div className="qrw-photo-loading" role="status" aria-label="Loading photo">
+            <Loader2 className="qrw-photo-loading-spinner" size={24} aria-hidden="true" />
+            <span>Loading photo…</span>
+          </div>
+        ) : null}
         {showBigHeart ? (
           <div className="qrw-double-tap-heart-overlay" aria-hidden="true">
-            <div key={bigHeartKey} className="qrw-double-tap-heart">
-              <Heart size={82} strokeWidth={1.5} />
+            <div key={bigHeartKey} className={`qrw-double-tap-heart is-${bigHeartTone}${showBigHeartBurst ? ' is-bursting' : ''}`}>
+              {showBigHeartBurst ? <>
+                <span className="qrw-big-heart-ring" />
+                <span className="qrw-big-heart-sparks">
+                  <i /><i /><i /><i />
+                </span>
+              </> : null}
+              <Heart className="qrw-double-tap-heart-icon" size={82} strokeWidth={1.5} />
             </div>
           </div>
         ) : null}
@@ -239,17 +269,35 @@ function PhotoPost({
             </button>
           </div>
         ) : (
-          <img
-            className="qrw-post-image"
-            src={activeSrc}
-            srcSet={srcSet}
-            sizes={sizes}
-            alt={photo.caption || `Photo by ${photo.uploadedBy}`}
-            loading={priority ? 'eager' : 'lazy'}
-            fetchPriority={priority ? 'high' : 'auto'}
-            decoding={priority ? 'sync' : 'async'}
-            onError={() => setFailed(true)}
-          />
+          <>
+            {!loaded && thumbSrc && thumbSrc !== feedSrc ? (
+              <img
+                className={`qrw-post-image qrw-post-image-preview${previewLoaded ? ' is-visible' : ''}`}
+                src={thumbSrc}
+                alt=""
+                aria-hidden="true"
+                loading={priority ? 'eager' : 'lazy'}
+                fetchPriority={priority ? 'high' : 'low'}
+                decoding="async"
+                onLoad={() => setPreviewLoaded(true)}
+              />
+            ) : null}
+            <img
+              className={`qrw-post-image qrw-post-image-main is-${loadStatus}`}
+              src={activeSrc}
+              srcSet={attempt > 0 ? undefined : srcSet}
+              sizes={attempt > 0 ? undefined : sizes}
+              alt={photo.caption || `Photo by ${photo.uploadedBy}`}
+              loading={priority ? 'eager' : 'lazy'}
+              fetchPriority={priority ? 'high' : 'auto'}
+              decoding="async"
+              onLoad={() => setLoaded(true)}
+              onError={() => {
+                setLoaded(false);
+                setFailed(true);
+              }}
+            />
+          </>
         )}
       </div>
       <div className="qrw-post-content">

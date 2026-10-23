@@ -1,12 +1,47 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, XCircle, ShieldCheck, LogOut, RefreshCcw, Camera, Loader2, Eye, EyeOff, Download, AlertTriangle, X, Trash2 } from 'lucide-react';
+import { CheckCircle2, XCircle, ShieldCheck, LogOut, RefreshCcw, Camera, CameraOff, Loader2, Eye, EyeOff, Download, AlertTriangle, X, Trash2 } from 'lucide-react';
 import { readableQrWallError } from '../../lib/axios/qrWallApi';
+import { getPhotoLoadStatus } from '../../components/qr-wall/photoLoadingState';
 import './moderator.css';
 
 function formatWhen(value) {
   if (!value) return '';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' });
+}
+
+function ModeratorPhotoImage({ src, alt }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const status = getPhotoLoadStatus({ loaded, failed });
+
+  return <>
+    {status === 'loading' ? (
+      <div className="snap-mod-photo-state is-loading" role="status" aria-label="Loading photo">
+        <Loader2 className="snap-mod-spin" size={25} aria-hidden="true" />
+        <span>Loading photo…</span>
+      </div>
+    ) : null}
+    {status === 'error' ? (
+      <div className="snap-mod-photo-state is-error" role="status">
+        <CameraOff size={26} aria-hidden="true" />
+        <span>Photo unavailable</span>
+      </div>
+    ) : (
+      <img
+        className={`is-${status}`}
+        loading="lazy"
+        decoding="async"
+        src={src}
+        alt={alt}
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          setLoaded(false);
+          setFailed(true);
+        }}
+      />
+    )}
+  </>;
 }
 
 export default function QRWallModeratorPage({ api }) {
@@ -296,7 +331,7 @@ export default function QRWallModeratorPage({ api }) {
             {loadingPhotos && !photos.length ? <div className="snap-mod-empty">Loading submissions…</div> : !photos.length ?
               <div className="snap-mod-empty"><CheckCircle2 size={38} /> No {tab} photos.</div> :
               <div className="snap-mod-grid">{photos.map(photo => <article key={photo.id} className="snap-mod-card">
-                <div className="snap-mod-image"><img loading="lazy" src={api.moderatorPhotoUrl(photo.id)} alt={photo.caption || 'Submitted photo'} /></div>
+                <div className="snap-mod-image"><ModeratorPhotoImage src={api.moderatorPhotoUrl(photo.id, 'thumbnail')} alt={photo.caption || 'Submitted photo'} /></div>
                 <div className="snap-mod-info">
                   <span className="snap-mod-event">{photo.eventTitle}</span>
                   <h2>{photo.uploadedBy}</h2>
@@ -342,7 +377,9 @@ export default function QRWallModeratorPage({ api }) {
               This submission will remain private and will not appear in the public photo feed or live slideshow.
             </p>
             <div className="snap-mod-reject-preview">
-              <img src={api.moderatorPhotoUrl(rejectPhoto.id)} alt={rejectPhoto.caption || 'Photo to reject'} />
+              <div className="snap-mod-preview-media">
+                <ModeratorPhotoImage src={api.moderatorPhotoUrl(rejectPhoto.id, 'feed')} alt={rejectPhoto.caption || 'Photo to reject'} />
+              </div>
               <div className="snap-mod-reject-details">
                 <span>PHOTO #{rejectPhoto.id}</span>
                 <strong>{rejectPhoto.uploadedBy || 'Guest'}</strong>
@@ -382,7 +419,9 @@ export default function QRWallModeratorPage({ api }) {
               This cannot be undone.
             </p>
             {deleteTarget.kind === 'single' ? <div className="snap-mod-reject-preview">
-              <img src={api.moderatorPhotoUrl(deleteTarget.id)} alt={deleteTarget.photo.caption || 'Photo to delete'} />
+              <div className="snap-mod-preview-media">
+                <ModeratorPhotoImage src={api.moderatorPhotoUrl(deleteTarget.id, 'feed')} alt={deleteTarget.photo.caption || 'Photo to delete'} />
+              </div>
               <div className="snap-mod-reject-details">
                 <span>PHOTO #{deleteTarget.id} · {deleteTarget.status.toUpperCase()}</span>
                 <strong>{deleteTarget.photo.uploadedBy || 'Guest'}</strong>

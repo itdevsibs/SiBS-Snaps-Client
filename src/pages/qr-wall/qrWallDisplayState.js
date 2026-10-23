@@ -58,3 +58,11 @@ export function calculateOptimisticReaction(photo) {
   };
 }
 
+export function getDoubleTapHeartTone(photo) {
+  return photo?.reacted ? 'unreact-hollow' : 'react-fill';
+}
+
+export function shouldShowDoubleTapBurst(photo) {
+  return !photo?.reacted;
+}
+
