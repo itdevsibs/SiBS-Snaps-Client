@@ -26,6 +26,12 @@ function ModeratorCardImage({ src, alt }) {
           <Loader2 className="snap-mod-spin" size={24} />
         </div>
       )}
+      {failed && (
+        <div className="snap-mod-img-failed">
+          <AlertTriangle size={22} />
+          <span>Image unavailable</span>
+        </div>
+      )}
       <img
         loading="lazy"
         src={src}
@@ -91,10 +97,32 @@ export default function QRWallModeratorPage({ api }) {
   const rejectCancelRef = useRef(null);
   const deleteDialogRef = useRef(null);
   const deleteCancelRef = useRef(null);
+  const errorDialogRef = useRef(null);
+  const errorCloseRef = useRef(null);
   const deletingRef = useRef(false);
   deletingRef.current = deleting;
   const busyIdRef = useRef(null);
   busyIdRef.current = busyId;
+
+  useEffect(() => {
+    if (!error || !moderator) return undefined;
+    const previousFocus = document.activeElement;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    errorCloseRef.current?.focus();
+    const onKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setError('');
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = overflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [error, moderator]);
 
   // Accessible in-app confirmation: lock scrolling, trap keyboard focus,
   // support Escape while idle, and restore focus on close.
@@ -537,6 +565,29 @@ export default function QRWallModeratorPage({ api }) {
                 onClick={confirmDelete}>
                 {deleting ? <Loader2 className="snap-mod-spin" size={17} /> : <Trash2 size={17}/>}
                 {deleting ? 'Deleting…' : deleteTarget.kind === 'all' ? 'Delete All' : 'Delete photo'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {error && moderator && (
+        <div className="snap-mod-modal-backdrop" onMouseDown={event => {
+          if (event.target === event.currentTarget) setError('');
+        }}>
+          <section ref={errorDialogRef} className="snap-mod-reject-dialog snap-mod-error-dialog" role="alertdialog" aria-modal="true"
+            aria-labelledby="snap-error-title" aria-describedby="snap-error-desc">
+            <div className="snap-mod-reject-top">
+              <span className="snap-mod-reject-icon snap-mod-error-icon"><AlertTriangle size={24} /></span>
+              <button type="button" className="snap-mod-reject-close" aria-label="Close error notice"
+                onClick={() => setError('')}><X size={19} /></button>
+            </div>
+            <h2 id="snap-error-title">Notice</h2>
+            <p id="snap-error-desc" className="snap-mod-error-desc">
+              {error}
+            </p>
+            <div className="snap-mod-error-footer">
+              <button type="button" className="snap-mod-error-btn" ref={errorCloseRef} onClick={() => setError('')} autoFocus>
+                Understood
               </button>
             </div>
           </section>
