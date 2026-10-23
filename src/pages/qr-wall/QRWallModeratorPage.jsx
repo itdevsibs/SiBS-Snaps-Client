@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, XCircle, ShieldCheck, LogOut, RefreshCcw, Camera, CameraOff, Loader2, Eye, EyeOff, Download, AlertTriangle, X, Trash2 } from 'lucide-react';
+import { CheckCircle2, XCircle, ShieldCheck, LogOut, RefreshCcw, Camera, Loader2, Eye, EyeOff, Download, AlertTriangle, X, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { readableQrWallError } from '../../lib/axios/qrWallApi';
 import { getPhotoLoadStatus } from '../../components/qr-wall/photoLoadingState';
 import './moderator.css';
@@ -10,38 +10,56 @@ function formatWhen(value) {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' });
 }
 
-function ModeratorPhotoImage({ src, alt }) {
+function ModeratorCardImage({ src, alt }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const status = getPhotoLoadStatus({ loaded, failed });
 
-  return <>
-    {status === 'loading' ? (
-      <div className="snap-mod-photo-state is-loading" role="status" aria-label="Loading photo">
-        <Loader2 className="snap-mod-spin" size={25} aria-hidden="true" />
-        <span>Loading photo…</span>
-      </div>
-    ) : null}
-    {status === 'error' ? (
-      <div className="snap-mod-photo-state is-error" role="status">
-        <CameraOff size={26} aria-hidden="true" />
-        <span>Photo unavailable</span>
-      </div>
-    ) : (
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+  }, [src]);
+
+  return (
+    <div className="snap-mod-image">
+      {!loaded && !failed && (
+        <div className="snap-mod-img-spinner" aria-hidden="true">
+          <Loader2 className="snap-mod-spin" size={24} />
+        </div>
+      )}
       <img
-        className={`is-${status}`}
         loading="lazy"
-        decoding="async"
         src={src}
         alt={alt}
+        className={loaded ? 'snap-mod-img-loaded' : 'snap-mod-img-loading'}
         onLoad={() => setLoaded(true)}
-        onError={() => {
-          setLoaded(false);
-          setFailed(true);
-        }}
+        onError={() => setFailed(true)}
       />
-    )}
-  </>;
+    </div>
+  );
+}
+
+
+function getPageNumbers(currentPage, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [];
+  if (currentPage <= 4) {
+    for (let i = 1; i <= 5; i++) pages.push(i);
+    pages.push('...');
+    pages.push(total);
+  } else if (currentPage >= total - 3) {
+    pages.push(1);
+    pages.push('...');
+    for (let i = total - 4; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    pages.push('...');
+    pages.push(currentPage - 1);
+    pages.push(currentPage);
+    pages.push(currentPage + 1);
+    pages.push('...');
+    pages.push(total);
+  }
+  return pages;
 }
 
 export default function QRWallModeratorPage({ api }) {
@@ -67,6 +85,8 @@ export default function QRWallModeratorPage({ api }) {
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [cleanupPending, setCleanupPending] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
   const rejectDialogRef = useRef(null);
   const rejectCancelRef = useRef(null);
   const deleteDialogRef = useRef(null);
@@ -205,12 +225,11 @@ export default function QRWallModeratorPage({ api }) {
     if (!busyIdRef.current) setRejectPhoto(null);
   };
 
-  const load = useCallback(async (status = tab, before = null) => {
-    const response = await api.moderatorPhotos(status, before);
+  const load = useCallback(async (status = tab, pageNum = page) => {
+    const response = await api.moderatorPhotos(status, null, pageNum, PAGE_SIZE);
     setCounts(response.counts || { pending: 0, approved: 0, rejected: 0 });
-    setPhotos(current => before ? [...current, ...(response.photos || [])] : response.photos || []);
-    setCursor(response.nextCursor);
-  }, [api, tab]);
+    setPhotos(response.photos || []);
+  }, [api, tab, page]);
 
   useEffect(() => {
     let active = true;
@@ -225,15 +244,13 @@ export default function QRWallModeratorPage({ api }) {
     if (!moderator) return undefined;
     let active = true;
     setLoadingPhotos(true);
-    load(tab).catch(err => { if (active) setError(readableQrWallError(err)); })
+    load(tab, page).catch(err => { if (active) setError(readableQrWallError(err)); })
       .finally(() => { if (active) setLoadingPhotos(false); });
-    // Poll only pending tab so newly submitted photos arrive without refresh.
-    if (tab !== 'pending') return () => { active = false; };
     const timer = window.setInterval(() => {
-      load('pending').catch(err => { if (active) setError(readableQrWallError(err)); });
+      load(tab, page).catch(err => { if (active) setError(readableQrWallError(err)); });
     }, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [moderator, tab, load]);
+  }, [moderator, tab, page, load]);
 
   const login = async event => {
     event.preventDefault();
@@ -313,10 +330,30 @@ export default function QRWallModeratorPage({ api }) {
             {error && <div className="snap-mod-alert" role="alert">{error}</div>}
             {notice && <div className="snap-mod-success" role="status">{notice}</div>}
             <div className="snap-mod-tabs" role="tablist" aria-label="Review status">
-              {['pending','approved','rejected'].map(status => <button key={status} type="button" role="tab"
-                aria-selected={tab === status} className={tab === status ? 'active' : ''} onClick={() => { setTab(status); setRejectPhoto(null); setDeleteTarget(null); setError(''); setNotice(''); }}>
-                {status[0].toUpperCase() + status.slice(1)} <span>{counts[status] || 0}</span>
-              </button>)}
+              {['pending', 'approved', 'rejected'].map(status => {
+                const count = Number(counts[status] || 0);
+                const isPendingAlert = status === 'pending' && count >= 1;
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === status}
+                    className={tab === status ? 'active' : ''}
+                    onClick={() => {
+                      setTab(status);
+                      setPage(1);
+                      setRejectPhoto(null);
+                      setDeleteTarget(null);
+                      setError('');
+                      setNotice('');
+                    }}
+                  >
+                    {status[0].toUpperCase() + status.slice(1)}
+                    <span className={`snap-mod-count ${isPendingAlert ? 'snap-mod-count-pending' : ''}`}>{count}</span>
+                  </button>
+                );
+              })}
             </div>
             {(tab === 'approved' || tab === 'rejected') && Number(counts[tab] || 0) > 0 &&
               <div className="snap-mod-bulk-actions">
@@ -329,9 +366,10 @@ export default function QRWallModeratorPage({ api }) {
               <RefreshCcw size={15} /> Retry file cleanup
             </button>}
             {loadingPhotos && !photos.length ? <div className="snap-mod-empty">Loading submissions…</div> : !photos.length ?
-              <div className="snap-mod-empty"><CheckCircle2 size={38} /> No {tab} photos.</div> :
-              <div className="snap-mod-grid">{photos.map(photo => <article key={photo.id} className="snap-mod-card">
-                <div className="snap-mod-image"><ModeratorPhotoImage src={api.moderatorPhotoUrl(photo.id, 'thumbnail')} alt={photo.caption || 'Submitted photo'} /></div>
+              <div className="snap-mod-empty"><CheckCircle2 size={38} /> No {tab} photos.</div> : (
+              <>
+                <div className="snap-mod-grid">{photos.slice(0, PAGE_SIZE).map(photo => <article key={photo.id} className="snap-mod-card">
+                <ModeratorCardImage src={api.moderatorPhotoUrl(photo.id)} alt={photo.caption || 'Submitted photo'} />
                 <div className="snap-mod-info">
                   <span className="snap-mod-event">{photo.eventTitle}</span>
                   <h2>{photo.uploadedBy}</h2>
@@ -356,8 +394,67 @@ export default function QRWallModeratorPage({ api }) {
                     <Trash2 size={16} /> Delete photo
                   </button>
                 </div>}
-              </article>)}</div>}
-            {cursor && <button className="snap-mod-more" type="button" onClick={() => load(tab, cursor).catch(err => setError(readableQrWallError(err)))}>Load older photos</button>}
+              </article>)}</div>
+
+              {photos.length > 0 && (
+                <nav className="snap-mod-pagination" aria-label="Photos pagination">
+                  <button
+                    type="button"
+                    className="snap-mod-page-btn"
+                    disabled={page <= 1 || loadingPhotos}
+                    onClick={() => {
+                      const prev = Math.max(1, page - 1);
+                      setPage(prev);
+                      load(tab, prev);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={16} /> Prev
+                  </button>
+
+                  <div className="snap-mod-page-numbers">
+                    {getPageNumbers(page, Math.max(1, Math.ceil((Number(counts[tab] || photos.length)) / PAGE_SIZE))).map((item, idx) =>
+                      item === '...' ? (
+                        <span key={`ellipsis-${idx}`} className="snap-mod-page-ellipsis">…</span>
+                      ) : (
+                        <button
+                          key={item}
+                          type="button"
+                          className={`snap-mod-page-number ${item === page ? 'active' : ''}`}
+                          disabled={loadingPhotos}
+                          onClick={() => {
+                            if (item !== page) {
+                              setPage(item);
+                              load(tab, item);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }
+                          }}
+                          aria-current={item === page ? 'page' : undefined}
+                        >
+                          {item}
+                        </button>
+                      )
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="snap-mod-page-btn"
+                    disabled={page >= Math.max(1, Math.ceil((Number(counts[tab] || photos.length)) / PAGE_SIZE)) || loadingPhotos}
+                    onClick={() => {
+                      const next = Math.min(Math.max(1, Math.ceil((Number(counts[tab] || photos.length)) / PAGE_SIZE)), page + 1);
+                      setPage(next);
+                      load(tab, next);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    aria-label="Next page"
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
+                </nav>
+              )}
+            </>)}
           </>
         )}
       </div>

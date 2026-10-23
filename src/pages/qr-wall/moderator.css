@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 .snap-mod{min-height:100dvh;background:#eff3fa;color:#14294d;font-family:'Plus Jakarta Sans',system-ui,sans-serif;padding:0 20px 60px}
 .snap-mod *{box-sizing:border-box}.snap-mod button,.snap-mod input{font:inherit}
-.snap-mod-wrap{max-width:1250px;margin:auto}.snap-mod-head{height:88px;display:flex;align-items:center;gap:22px;justify-content:space-between;border-bottom:1px solid #dfe7f2}
+.snap-mod-wrap{max-width:1440px;margin:auto}.snap-mod-head{height:88px;display:flex;align-items:center;gap:22px;justify-content:space-between;border-bottom:1px solid #dfe7f2}
 .snap-mod-mark{font-size:26px;font-weight:800;display:flex;align-items:center;gap:10px;white-space:nowrap}.snap-mod-blue{color:#1d70c7}
 .snap-mod-heading{display:flex;align-items:center;gap:9px;font-weight:800;color:#334e78}.snap-mod-out,.snap-mod-refresh{border:1px solid #d5e0ee;background:white;color:#234777;border-radius:10px;display:inline-flex;align-items:center;gap:8px;padding:11px 17px;cursor:pointer}
 .snap-mod-login{background:#fff;border:1px solid #dce6f4;border-radius:22px;max-width:470px;margin:66px auto;padding:34px;box-shadow:0 18px 55px #172e5720}
@@ -11,8 +11,98 @@
 .snap-mod-login input{border:1px solid #cad8e9;padding:13px;border-radius:11px;outline-color:#2456b5;min-width:0}
 .snap-mod-primary{padding:14px;background:#1d57ad;color:#fff;border:none;border-radius:11px;font-weight:800;cursor:pointer}.snap-mod-primary:disabled{opacity:.65}
 .snap-mod-intro{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:27px 0 18px}.snap-mod-intro h1{margin:0;font-size:28px}
-.snap-mod-tabs{display:flex;gap:10px;border-bottom:1px solid #d5e1ee;margin-bottom:22px;overflow:auto}.snap-mod-tabs button{padding:14px 16px;border:0;border-bottom:3px solid transparent;background:transparent;cursor:pointer;font-weight:800;color:#67819f;white-space:nowrap}.snap-mod-tabs button.active{border-color:#1d57ad;color:#154485}.snap-mod-tabs span{background:#dfe8f5;padding:4px 8px;border-radius:30px;margin-left:5px;font-size:12px}
-.snap-mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:17px}.snap-mod-card{background:#fff;border:1px solid #e1e9f3;border-radius:17px;overflow:hidden;box-shadow:0 8px 24px #0c214512;display:flex;flex-direction:column}.snap-mod-image{height:230px;background:#dce6f3;display:grid;place-items:center}.snap-mod-image img{height:100%;width:100%;object-fit:contain}.snap-mod-info{padding:16px;flex:1;overflow-wrap:anywhere}.snap-mod-event{font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:#2463b4;font-size:10px}.snap-mod-info h2{font-size:17px;margin:8px 0 3px}.snap-mod-info time,.snap-mod-info small{font-size:11px;color:#8392a7}.snap-mod-info p{font-size:14px;line-height:1.5;color:#334663}.snap-mod-info small{display:block;margin-top:12px}
+.snap-mod-tabs{display:flex;gap:10px;border-bottom:1px solid #d5e1ee;margin-bottom:22px;overflow:auto}.snap-mod-tabs button{padding:14px 16px;border:0;border-bottom:3px solid transparent;background:transparent;cursor:pointer;font-weight:800;color:#67819f;white-space:nowrap}.snap-mod-tabs button.active{border-color:#1d57ad;color:#154485}.snap-mod-tabs .snap-mod-count{background:#dfe8f5;padding:4px 8px;border-radius:30px;margin-left:5px;font-size:12px;position:relative;display:inline-flex;align-items:center;justify-content:center}
+.snap-mod-tabs button {
+  position: relative;
+}
+
+/* When Pending has >= 1: make background of number red and number color white */
+.snap-mod-tabs .snap-mod-count.snap-mod-count-pending {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  font-weight: 800;
+}
+
+/* Card lazy image loading */
+.snap-mod-image {
+  position: relative;
+}
+.snap-mod-img-spinner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #7b8ea9;
+  background: #e9eff8;
+  z-index: 1;
+}
+.snap-mod-img-loading {
+  opacity: 0;
+}
+.snap-mod-img-loaded {
+  opacity: 1;
+  transition: opacity 0.25s ease-in;
+}
+
+/* Pagination Controls */
+.snap-mod-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 36px;
+  flex-wrap: wrap;
+}
+.snap-mod-page-numbers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.snap-mod-page-btn,
+.snap-mod-page-number {
+  min-width: 38px;
+  height: 38px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 10px;
+  border: 1px solid #d5e0ee;
+  background: #ffffff;
+  color: #234777;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.snap-mod-page-btn:hover:not(:disabled),
+.snap-mod-page-number:hover:not(:disabled):not(.active) {
+  background: #eef4fc;
+  border-color: #bcd0ea;
+  color: #174485;
+}
+.snap-mod-page-number.active {
+  background: #1d57ad;
+  border-color: #1d57ad;
+  color: #ffffff;
+  cursor: default;
+}
+.snap-mod-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #f6f8fb;
+}
+.snap-mod-page-ellipsis {
+  padding: 0 4px;
+  color: #7b8ea9;
+  font-weight: 700;
+}
+.snap-mod-grid{display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:15px}
+@media(max-width:1250px){.snap-mod-grid{grid-template-columns:repeat(4, minmax(0, 1fr))}}
+@media(max-width:960px){.snap-mod-grid{grid-template-columns:repeat(3, minmax(0, 1fr))}}
+@media(max-width:680px){.snap-mod-grid{grid-template-columns:repeat(2, minmax(0, 1fr))}}
+@media(max-width:480px){.snap-mod-grid{grid-template-columns:1fr}}.snap-mod-card{background:#fff;border:1px solid #e1e9f3;border-radius:17px;overflow:hidden;box-shadow:0 8px 24px #0c214512;display:flex;flex-direction:column}.snap-mod-image{height:210px;background:#dce6f3;display:grid;place-items:center}.snap-mod-image img{height:100%;width:100%;object-fit:contain}.snap-mod-info{padding:16px;flex:1;overflow-wrap:anywhere}.snap-mod-event{font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:#2463b4;font-size:10px}.snap-mod-info h2{font-size:17px;margin:8px 0 3px}.snap-mod-info time,.snap-mod-info small{font-size:11px;color:#8392a7}.snap-mod-info p{font-size:14px;line-height:1.5;color:#334663}.snap-mod-info small{display:block;margin-top:12px}
 .snap-mod-actions{display:flex;gap:8px;padding:13px 16px;border-top:1px solid #ebeff6}.snap-mod-actions button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 8px;border-radius:9px;font-weight:800;font-size:12px;cursor:pointer}.snap-mod-approve{background:#137c5d;border:1px solid #137c5d;color:#fff}.snap-mod-reject{background:#fff2f3;border:1px solid #ffcbd0;color:#ba3041}.snap-mod-actions button:disabled{opacity:.6}
 .snap-mod-alert,.snap-mod-success{padding:13px 15px;border-radius:12px;margin:16px 0;font-size:13px}.snap-mod-alert{background:#ffe8e9;border:1px solid #ffcbd0;color:#9b2533}.snap-mod-success{background:#e1f6eb;border:1px solid #b6e7ce;color:#147351}
 .snap-mod-empty{display:flex;align-items:center;justify-content:center;gap:15px;flex-direction:column;padding:70px 15px;color:#7b8ea9}.snap-mod-more{display:block;background:#fff;border:1px solid #cad7e8;color:#2457a9;margin:24px auto;border-radius:10px;padding:13px 22px;cursor:pointer}
@@ -94,8 +184,8 @@
   position:relative;
   display:block;
   width:100%;
-  height:244px;
-  flex:0 0 244px;
+  height:210px;
+  flex:0 0 210px;
   min-height:0;
   overflow:hidden;
   isolation:isolate;
