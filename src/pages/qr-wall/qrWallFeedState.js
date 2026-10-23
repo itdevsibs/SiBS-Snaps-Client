@@ -177,7 +177,7 @@ export const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // Exactly 10 MiB per individua
 /**
  * Validates a photo post submission payload before sending to backend.
  */
-export function validatePhotoSubmission({ name, files, maxBytes = MAX_PHOTO_BYTES }) {
+export function validatePhotoSubmission({ name, files, caption, maxBytes = MAX_PHOTO_BYTES }) {
   if (!name || !name.trim()) {
     return { valid: false, error: 'Please enter your name.' };
   }
@@ -190,6 +190,9 @@ export function validatePhotoSubmission({ name, files, maxBytes = MAX_PHOTO_BYTE
   }
   if (file.size === 0) {
     return { valid: false, error: 'The selected photo is empty.' };
+  }
+  if (!caption || !caption.trim()) {
+    return { valid: false, error: 'Please enter a caption.' };
   }
   return { valid: true, error: null };
 }

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { isCancelError, readableQrWallError, readableUploadError } from '../src/lib/axios/qrWallApi.js';
 import {
   MAX_PHOTO_BYTES,
   validatePhotoSubmission,
@@ -59,9 +60,14 @@ test('required validation: enforces author name, single photo, and 10 MB limit',
   assert.equal(emptyFile.valid, false);
   assert.equal(emptyFile.error, 'The selected photo is empty.');
 
+  const noCaption = validatePhotoSubmission({ name: 'Juan', caption: '   ', files: [{ name: 'pic.jpg', size: 100 }] });
+  assert.equal(noCaption.valid, false);
+  assert.equal(noCaption.error, 'Please enter a caption.');
+
   // Valid submission
   const valid = validatePhotoSubmission({
     name: 'Juan Dela Cruz',
+    caption: 'A great moment',
     files: [{ name: 'celebration.jpg', size: 4.5 * 1024 * 1024 }],
   });
   assert.equal(valid.valid, true);
@@ -132,6 +138,40 @@ test('upload failure: handles failed server response gracefully', async () => {
   );
 });
 
+test('upload timeout: shows a clear message and advises checking before retrying', () => {
+  for (const error of [{ code: 'ECONNABORTED', message: 'timeout of 30000ms exceeded' }, { code: 'ETIMEDOUT' }, { response: { status: 504 } }]) {
+    assert.match(readableUploadError(error), /timed out/i);
+    assert.match(readableUploadError(error), /moderator/i);
+  }
+  assert.equal(readableUploadError({ response: { data: { message: 'Photo is invalid' } } }), 'Photo is invalid');
+});
+
+test('cancellation errors: isCancelError detects canceled requests and readableQrWallError silences them', () => {
+  const axiosCancel = new Error('canceled');
+  axiosCancel.name = 'CanceledError';
+  axiosCancel.code = 'ERR_CANCELED';
+  assert.equal(isCancelError(axiosCancel), true);
+  assert.equal(readableQrWallError(axiosCancel, 'Fallback message'), '');
+
+  const domAbort = new Error('The user aborted a request.');
+  domAbort.name = 'AbortError';
+  assert.equal(isCancelError(domAbort), true);
+  assert.equal(readableQrWallError(domAbort, 'Fallback message'), '');
+
+  const genericCancel = { message: 'canceled' };
+  assert.equal(isCancelError(genericCancel), true);
+  assert.equal(readableQrWallError(genericCancel, 'Fallback message'), '');
+
+  // Genuine server errors are preserved
+  const serverError = { response: { data: { message: 'Event not found.' } } };
+  assert.equal(isCancelError(serverError), false);
+  assert.equal(readableQrWallError(serverError, 'Fallback message'), 'Event not found.');
+
+  const networkError = new Error('Network error');
+  assert.equal(isCancelError(networkError), false);
+  assert.equal(readableQrWallError(networkError, 'Fallback message'), 'Network error');
+});
+
 // 4. Unaffected feed loading & live updates
 test('unaffected feed loading: deduplication and live updates operate normally', () => {
   const currentFeed = [{ id: 50, uploadedBy: 'Ana', reactionCount: 3 }];
@@ -184,8 +224,8 @@ test('QRWallJoinPage: verifies absence of tabs, presence of composer and modal m
 
   // Verify Facebook-style composer markup
   assert.ok(jsxContent.includes('qrw-composer-card'), 'Must render composer card');
-  assert.ok(jsxContent.includes('Share your moment...'), 'Must render Share your moment... trigger');
-  assert.ok(jsxContent.includes('qrw-composer-action-btn'), 'Must render Photo action button');
+  assert.ok(jsxContent.includes('Upload your moments here'), 'Must render the upload prompt');
+  assert.ok(!jsxContent.includes('Upload Photo Here'), 'Must not render a separate upload button');
 
   // Verify modal markup
   assert.ok(jsxContent.includes('qrw-create-modal'), 'Must render create post modal');

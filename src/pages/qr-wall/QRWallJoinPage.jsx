@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useParams } from 'react-router-dom';
 import { ArrowUp, Camera, CheckCircle2, ImagePlus, Send, UserRound, X } from 'lucide-react';
 import PhotoPost from '../../components/qr-wall/PhotoPost';
-import { readableQrWallError } from '../../lib/axios/qrWallApi';
+import { readableQrWallError, readableUploadError } from '../../lib/axios/qrWallApi';
 import { applyReactionChange } from './qrWallDisplayState';
 import {
   MAX_PHOTO_BYTES,
@@ -563,7 +563,7 @@ export default function QRWallJoinPage({ api, token }) {
       return;
     }
 
-    const validation = validatePhotoSubmission({ name, files, maxBytes: MAX_PHOTO_BYTES });
+    const validation = validatePhotoSubmission({ name, files, caption, maxBytes: MAX_PHOTO_BYTES });
     if (!validation.valid) {
       setModalError(validation.error);
       return;
@@ -589,7 +589,7 @@ export default function QRWallJoinPage({ api, token }) {
       setMessage('Your photo was submitted for moderator approval. It will appear publicly once approved.');
       void refreshFirstPage().catch(() => {});
     } catch (err) {
-      const readable = readableQrWallError(err, 'Photo upload failed. Your selection is still available for retry.');
+      const readable = readableUploadError(err);
       setModalError(readable);
       setError(readable);
     } finally {
@@ -671,21 +671,9 @@ export default function QRWallJoinPage({ api, token }) {
                   type="button"
                   className="qrw-composer-trigger"
                   onClick={() => openCreateModal(false)}
-                  aria-label="Share your moment"
+                  aria-label="Upload your moments here"
                 >
-                  <span>Share your moment...</span>
-                </button>
-              </div>
-              <div className="qrw-composer-divider" />
-              <div className="qrw-composer-actions">
-                <button
-                  type="button"
-                  className="qrw-composer-action-btn"
-                  onClick={() => openCreateModal(true)}
-                  aria-label="Add a photo"
-                >
-                  <ImagePlus size={18} className="qrw-composer-action-icon" />
-                  <span>Upload Photo Here</span>
+                  <span>Upload your moments here</span>
                 </button>
               </div>
             </div>
@@ -945,10 +933,11 @@ export default function QRWallJoinPage({ api, token }) {
 
               <div className="qrw-field-group">
                 <label className="qrw-field-label" htmlFor="qrw-modal-caption">
-                  Caption <small>(optional)</small>
+                  Caption <span className="qrw-required">*</span>
                 </label>
                 <textarea
                   id="qrw-modal-caption"
+                  required
                   className="qrw-field"
                   rows={3}
                   maxLength={240}
@@ -961,7 +950,7 @@ export default function QRWallJoinPage({ api, token }) {
 
               <button
                 className="qrw-primary qrw-modal-submit"
-                disabled={busy || !files.length || !name.trim()}
+                disabled={busy || !files.length || !name.trim() || !caption.trim()}
                 type="submit"
               >
                 <Send size={16} /> {busy ? (uploadProgress || 'Submitting…') : 'Submit photo for approval'}
