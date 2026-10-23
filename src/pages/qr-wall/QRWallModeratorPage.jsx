@@ -10,7 +10,7 @@ function formatWhen(value) {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' });
 }
 
-function ModeratorCardImage({ src, alt }) {
+function ModeratorPhotoImage({ src, alt, className = '' }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -20,15 +20,15 @@ function ModeratorCardImage({ src, alt }) {
   }, [src]);
 
   return (
-    <div className="snap-mod-image">
+    <>
       {!loaded && !failed && (
         <div className="snap-mod-img-spinner" aria-hidden="true">
-          <Loader2 className="snap-mod-spin" size={24} />
+          <Loader2 className="snap-mod-spin" size={20} />
         </div>
       )}
       {failed && (
         <div className="snap-mod-img-failed">
-          <AlertTriangle size={22} />
+          <AlertTriangle size={20} />
           <span>Image unavailable</span>
         </div>
       )}
@@ -36,10 +36,18 @@ function ModeratorCardImage({ src, alt }) {
         loading="lazy"
         src={src}
         alt={alt}
-        className={loaded ? 'snap-mod-img-loaded' : 'snap-mod-img-loading'}
+        className={`${className} ${loaded ? 'snap-mod-img-loaded' : 'snap-mod-img-loading'}`.trim()}
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />
+    </>
+  );
+}
+
+function ModeratorCardImage({ src, alt }) {
+  return (
+    <div className="snap-mod-image">
+      <ModeratorPhotoImage src={src} alt={alt} />
     </div>
   );
 }
