@@ -98,7 +98,7 @@ export function createQrWallApi(http) {
       body.append('caption', caption || '');
       photos.forEach(photo => body.append('photos', photo));
       // Let the browser set the multipart boundary. Do not set Content-Type manually.
-      return request(http.post(`${prefix}/public/${safeToken(token)}/photos`, body));
+      return request(http.post(`${prefix}/public/${safeToken(token)}/photos`, body, { timeout: 120000 }));
     },
     comment: (token, photoId, author, body) => request(http.post(
       `${prefix}/public/${safeToken(token)}/photos/${photoId}/comments`, { author, body },
