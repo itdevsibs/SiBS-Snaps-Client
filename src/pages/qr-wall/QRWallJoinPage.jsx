@@ -587,11 +587,7 @@ export default function QRWallJoinPage({ api, token }) {
       if (fileInputRef.current) fileInputRef.current.value = '';
       setShowCreateModal(false);
       setMessage('Your photo was submitted for moderator approval. It will appear publicly once approved.');
-      try {
-        await refreshFirstPage();
-      } catch {
-        /* feed will retry automatically */
-      }
+      void refreshFirstPage().catch(() => {});
     } catch (err) {
       const readable = readableQrWallError(err, 'Photo upload failed. Your selection is still available for retry.');
       setModalError(readable);
