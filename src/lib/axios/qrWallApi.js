@@ -110,6 +110,25 @@ export function createQrWallApi(http) {
   };
 }
 
+export function isCancelError(error) {
+  if (!error) return false;
+  return Boolean(
+    error?.name === 'CanceledError' ||
+    error?.name === 'AbortError' ||
+    error?.code === 'ERR_CANCELED' ||
+    error?.message === 'canceled' ||
+    error?.__CANCEL__
+  );
+}
+
 export function readableQrWallError(error, fallback = 'Something went wrong. Please try again.') {
-  return error?.response?.data?.message || error?.message || fallback;
+  if (!error || isCancelError(error)) return '';
+  return error?.response?.data?.message || (error?.message && error.message !== 'canceled' ? error.message : fallback);
+}
+
+export function readableUploadError(error) {
+  if (['ECONNABORTED', 'ETIMEDOUT'].includes(error?.code) || [408, 504].includes(error?.response?.status)) {
+    return 'The upload timed out. Your photo may still have been submitted. Please check with the moderator before retrying.';
+  }
+  return readableQrWallError(error, 'Photo upload failed. Your selection is still available for retry.');
 }
