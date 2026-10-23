@@ -46,7 +46,10 @@ export function createQrWallApi(http) {
       params: { status, ...(upToId ? { upToId } : {}) },
     })),
     moderatorRetryDeletionCleanup: () => request(http.post(`${prefix}/moderator/photos/deletion-cleanup`, {})),
-    moderatorPhotoUrl: id => apiUrl(`/moderator/photos/${encodeURIComponent(id)}/image`),
+    moderatorPhotoUrl: (id, variant = 'feed') => {
+      const size = ['thumbnail', 'feed', 'large'].includes(variant) ? variant : 'feed';
+      return apiUrl(`/moderator/photos/${encodeURIComponent(id)}/image?variant=${size}`);
+    },
     moderatorDownload: async id => (await http.get(`${prefix}/moderator/photos/${encodeURIComponent(id)}/download`, { responseType: 'blob' })).data,
     getActive: (options = {}) => request(http.get(`${prefix}/public/active`, { signal: options?.signal })),
     getEvent: (token, options = {}) => request(http.get(`${prefix}/public/${safeToken(token)}`, { signal: options?.signal })),

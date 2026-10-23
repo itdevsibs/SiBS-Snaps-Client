@@ -8,6 +8,8 @@ import {
   isDoubleTapGesture,
   canTriggerReaction,
   calculateOptimisticReaction,
+  getDoubleTapHeartTone,
+  shouldShowDoubleTapBurst,
 } from '../src/pages/qr-wall/qrWallDisplayState.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,7 +28,6 @@ test('desktop double-click: recognizes clicks within delay threshold and rejects
 
 // 2. Mobile double-tap gesture & touch distance tolerance
 test('mobile double-tap: checks timing and distance threshold to distinguish tap from scroll', () => {
-  const touchStart = 2000;
   const tap1 = { x: 100, y: 150, time: 2000 };
   const tap2Valid = { x: 105, y: 152, time: 2180 }; // 180ms apart, ~6px apart
   const tap2Moved = { x: 100, y: 230, time: 2180 }; // 180ms apart, 80px apart (scroll drag)
@@ -85,6 +86,13 @@ test('reaction counts & already-reacted posts: toggles reaction state and update
   assert.equal(optimisticUnlike.reactionCount, 5);
 });
 
+test('double-tap heart style: fills on react and hollows on unreact', () => {
+  assert.equal(getDoubleTapHeartTone({ reacted: false }), 'react-fill');
+  assert.equal(getDoubleTapHeartTone({ reacted: true }), 'unreact-hollow');
+  assert.equal(shouldShowDoubleTapBurst({ reacted: false }), true);
+  assert.equal(shouldShowDoubleTapBurst({ reacted: true }), false);
+});
+
 // 5. Rapid tapping: duplicate request prevention during pending reactions
 test('rapid tapping: prevents duplicate requests while reaction is in flight', () => {
   const mockOnReact = () => Promise.resolve({ reacted: true });
@@ -107,7 +115,7 @@ test('failed API requests: safely handles rejected reaction calls', async () => 
   let photosState = [{ id: 10, reacted: false, reactionCount: 2 }];
   let errorMessage = '';
 
-  const mockFailingReact = async (photo) => {
+  const mockFailingReact = async () => {
     try {
       const err = new Error('Network error');
       throw err;

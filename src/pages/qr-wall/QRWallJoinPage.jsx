@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ArrowUp, Camera, CheckCircle2, ImagePlus, Send, UserRound, X } from 'lucide-react';
 import PhotoPost from '../../components/qr-wall/PhotoPost';
@@ -13,7 +13,19 @@ import {
   validatePhotoSubmission,
 } from './qrWallFeedState';
 import { splitCaption } from '../../components/qr-wall/captionText';
-import { getHeaderVisibility, isMeaningfulHeaderScroll } from './qrWallHeaderVisibility';
+import { getHeaderPresentationClass, getHeaderVisibility, isMeaningfulHeaderScroll } from './qrWallHeaderVisibility';
+import {
+  getViewerDismissTarget,
+  getViewerDragPresentation,
+  getViewerScrollTransfer,
+  restoreViewerScrollPosition,
+  shouldDismissViewerDrag,
+} from './qrWallViewerDrag';
+import {
+  getCreateSheetBackdropAlpha,
+  getCreateSheetDragOffset,
+  shouldDismissCreateSheet,
+} from './qrWallCreateSheetDrag';
 import './qrWall.css';
 
 const PAGE_SIZE = 10;
@@ -60,12 +72,55 @@ export default function QRWallJoinPage({ api, token }) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState(() => wallToken ? '' : 'Invalid photo wall link. Scan the QR code on the display again.');
   const [viewerPhoto, setViewerPhoto] = useState(null);
+  const [viewerDragY, setViewerDragY] = useState(0);
+  const [viewerDragging, setViewerDragging] = useState(false);
+  const [viewerDismissing, setViewerDismissing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [createSheetDragY, setCreateSheetDragY] = useState(0);
+  const [createSheetDragging, setCreateSheetDragging] = useState(false);
+  const [createSheetDismissing, setCreateSheetDismissing] = useState(false);
 
   const lastActiveElementRef = useRef(null);
   const nameInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const viewerDismissTimerRef = useRef(null);
+  const viewerMomentumFrameRef = useRef(null);
+  const viewerScrollTransferRef = useRef({ offsetY: 0, velocityY: 0 });
+  const viewerGestureRef = useRef({ pointerId: null, startY: 0, lastY: 0, lastTime: 0, offsetY: 0, velocityY: 0 });
+  const createSheetGestureRef = useRef({ pointerId: null, startY: 0, lastY: 0, lastTime: 0, offsetY: 0, velocityY: 0 });
+  const createSheetDismissTimerRef = useRef(null);
+  const modalOpenRef = useRef(false);
+
+  useEffect(() => {
+    modalOpenRef.current = Boolean(viewerPhoto || showCreateModal);
+  }, [viewerPhoto, showCreateModal]);
+
+  const resetViewerMotion = useCallback(() => {
+    setViewerDragY(0);
+    setViewerDragging(false);
+    setViewerDismissing(false);
+    viewerGestureRef.current.pointerId = null;
+  }, []);
+
+  const closeViewer = useCallback(() => {
+    if (viewerDismissTimerRef.current) {
+      window.clearTimeout(viewerDismissTimerRef.current);
+      viewerDismissTimerRef.current = null;
+    }
+    setViewerPhoto(null);
+    resetViewerMotion();
+  }, [resetViewerMotion]);
+
+  const openViewer = useCallback(photo => {
+    if (viewerMomentumFrameRef.current) {
+      window.cancelAnimationFrame(viewerMomentumFrameRef.current);
+      viewerMomentumFrameRef.current = null;
+    }
+    viewerScrollTransferRef.current = { offsetY: 0, velocityY: 0 };
+    resetViewerMotion();
+    setViewerPhoto(photo);
+  }, [resetViewerMotion]);
 
   if (prevWallToken !== wallToken) {
     setPrevWallToken(wallToken);
@@ -93,6 +148,11 @@ export default function QRWallJoinPage({ api, token }) {
       isScrolledDownRef.current = scrolled;
       setIsScrolledDown(scrolled);
 
+      if (modalOpenRef.current) {
+        headerScrollYRef.current = currentY;
+        return;
+      }
+
       setIsHeaderVisible(visible => getHeaderVisibility({
         previousY: headerScrollYRef.current,
         currentY,
@@ -112,11 +172,68 @@ export default function QRWallJoinPage({ api, token }) {
   useEffect(() => {
     if (!viewerPhoto) return undefined;
     const handleKeyDown = e => {
-      if (e.key === 'Escape') setViewerPhoto(null);
+      if (e.key === 'Escape') closeViewer();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewerPhoto, closeViewer]);
+
+  // Freeze the feed at its exact position while the full-photo viewer is open.
+  useLayoutEffect(() => {
+    if (!viewerPhoto) return undefined;
+
+    const body = document.body;
+    const rootStyle = document.documentElement.style;
+    const scrollY = window.scrollY;
+    const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const originalRootScrollBehavior = rootStyle.scrollBehavior;
+    const original = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+      paddingRight: body.style.paddingRight,
+    };
+    const scrollbarGap = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    if (scrollbarGap) body.style.paddingRight = `${scrollbarGap}px`;
+
+    return () => {
+      const transfer = getViewerScrollTransfer({
+        scrollY,
+        ...viewerScrollTransferRef.current,
+        maxScrollY,
+      });
+      viewerScrollTransferRef.current = { offsetY: 0, velocityY: 0 };
+      restoreViewerScrollPosition({
+        rootStyle,
+        bodyStyle: body.style,
+        originalBodyStyle: original,
+        originalRootScrollBehavior,
+        scrollY: transfer.restoreY,
+        scrollTo: (x, y) => window.scrollTo(x, y),
+      });
+      if (Math.abs(transfer.momentumTargetY - transfer.restoreY) > 1) {
+        viewerMomentumFrameRef.current = window.requestAnimationFrame(() => {
+          window.scrollTo({ top: transfer.momentumTargetY, left: 0, behavior: 'smooth' });
+          viewerMomentumFrameRef.current = null;
+        });
+      }
+    };
   }, [viewerPhoto]);
+
+  useEffect(() => () => {
+    if (viewerDismissTimerRef.current) window.clearTimeout(viewerDismissTimerRef.current);
+    if (viewerMomentumFrameRef.current) window.cancelAnimationFrame(viewerMomentumFrameRef.current);
+  }, []);
 
   // Prefetch the next 1-2 images when feed updates
   useEffect(() => {
@@ -340,25 +457,44 @@ export default function QRWallJoinPage({ api, token }) {
 
   const clearAlerts = () => { setError(''); setMessage(''); };
 
+  const resetCreateSheetMotion = useCallback(() => {
+    setCreateSheetDragY(0);
+    setCreateSheetDragging(false);
+    setCreateSheetDismissing(false);
+    createSheetGestureRef.current.pointerId = null;
+  }, []);
+
   const openCreateModal = useCallback((autoTriggerFile = false) => {
     lastActiveElementRef.current = document.activeElement;
     setModalError('');
+    resetCreateSheetMotion();
     setShowCreateModal(true);
     if (autoTriggerFile && files.length === 0) {
       setTimeout(() => {
         fileInputRef.current?.click();
       }, 60);
     }
-  }, [files.length]);
+  }, [files.length, resetCreateSheetMotion]);
 
   const closeCreateModal = useCallback(() => {
     if (busy) return;
+    if (createSheetDismissTimerRef.current) {
+      window.clearTimeout(createSheetDismissTimerRef.current);
+      createSheetDismissTimerRef.current = null;
+    }
     setShowCreateModal(false);
     setModalError('');
+    resetCreateSheetMotion();
     if (lastActiveElementRef.current && typeof lastActiveElementRef.current.focus === 'function') {
       lastActiveElementRef.current.focus();
     }
-  }, [busy]);
+  }, [busy, resetCreateSheetMotion]);
+
+  useEffect(() => () => {
+    if (createSheetDismissTimerRef.current) {
+      window.clearTimeout(createSheetDismissTimerRef.current);
+    }
+  }, []);
 
   // Escape key closes modal
   useEffect(() => {
@@ -497,10 +633,14 @@ export default function QRWallJoinPage({ api, token }) {
   };
 
   const closed = event?.status !== 'active';
+  const modalOpen = Boolean(viewerPhoto || showCreateModal);
 
   return (
     <main className="qrw qrw-mobile">
-      <header className={`qrw-mobile-head ${isHeaderVisible ? 'is-visible' : 'is-hidden'}`}>
+      <header
+        className={`qrw-mobile-head ${getHeaderPresentationClass({ visible: isHeaderVisible, modalOpen })}`}
+        aria-hidden={modalOpen || undefined}
+      >
         <span className="qrw-mobile-brand">
           <img className="qrw-mobile-logo" src="/SiBSLogoWhite.png"
             alt="SiBS — Human Expertise. Technology Forward." />
@@ -580,7 +720,7 @@ export default function QRWallJoinPage({ api, token }) {
                   onReact={!closed ? onReact : undefined}
                   reacting={reactBusyIds.has(String(photo.id))}
                   priority={index === 0}
-                  onOpenViewer={setViewerPhoto}
+                  onOpenViewer={openViewer}
                 />
               </div>
             ))}
@@ -621,15 +761,66 @@ export default function QRWallJoinPage({ api, token }) {
               closeCreateModal();
             }
           }}
+          style={{ backgroundColor: `rgba(10, 20, 42, ${getCreateSheetBackdropAlpha(createSheetDragY, window.innerHeight)})` }}
         >
           <div
-            className="qrw-create-modal"
+            className={`qrw-create-modal${createSheetDragging ? ' is-dragging' : ''}${createSheetDismissing ? ' is-dismissing' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="qrw-create-post-title"
             onClick={e => e.stopPropagation()}
+            style={{ transform: `translate3d(0, ${createSheetDragY}px, 0)` }}
           >
-            <div className="qrw-create-modal-header">
+            <div className="qrw-create-modal-header"
+              onPointerDown={e => {
+                if (busy || createSheetDismissing || window.innerWidth > 580
+                  || (e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('button')) return;
+                const now = performance.now();
+                createSheetGestureRef.current = {
+                  pointerId: e.pointerId,
+                  startY: e.clientY,
+                  lastY: e.clientY,
+                  lastTime: now,
+                  offsetY: 0,
+                  velocityY: 0,
+                };
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                setCreateSheetDragging(true);
+              }}
+              onPointerMove={e => {
+                const gesture = createSheetGestureRef.current;
+                if (gesture.pointerId !== e.pointerId || busy || createSheetDismissing) return;
+                const now = performance.now();
+                const elapsed = Math.max(1, now - gesture.lastTime);
+                const rawOffset = e.clientY - gesture.startY;
+                const offsetY = getCreateSheetDragOffset(rawOffset);
+                gesture.velocityY = (e.clientY - gesture.lastY) / elapsed;
+                gesture.lastY = e.clientY;
+                gesture.lastTime = now;
+                gesture.offsetY = offsetY;
+                setCreateSheetDragY(offsetY);
+              }}
+              onPointerUp={e => {
+                const gesture = createSheetGestureRef.current;
+                if (gesture.pointerId !== e.pointerId) return;
+                gesture.pointerId = null;
+                e.currentTarget.releasePointerCapture?.(e.pointerId);
+                setCreateSheetDragging(false);
+                if (!busy && shouldDismissCreateSheet(gesture)) {
+                  setCreateSheetDismissing(true);
+                  setCreateSheetDragY(window.innerHeight + 80);
+                  createSheetDismissTimerRef.current = window.setTimeout(closeCreateModal, 220);
+                } else {
+                  setCreateSheetDragY(0);
+                }
+              }}
+              onPointerCancel={e => {
+                if (createSheetGestureRef.current.pointerId !== e.pointerId) return;
+                createSheetGestureRef.current.pointerId = null;
+                setCreateSheetDragging(false);
+                setCreateSheetDragY(0);
+              }}>
+              <span className="qrw-create-modal-drag-handle" aria-hidden="true" />
               <h2 id="qrw-create-post-title">Create Post</h2>
               <button
                 type="button"
@@ -794,22 +985,83 @@ export default function QRWallJoinPage({ api, token }) {
           role="dialog"
           aria-modal="true"
           aria-label="Full size photo view"
-          onClick={() => setViewerPhoto(null)}
+          onClick={closeViewer}
+          style={{ backgroundColor: `rgba(10, 20, 42, ${getViewerDragPresentation(viewerDragY, window.innerHeight).backdropAlpha})` }}
         >
-          <div className="qrw-viewer-dialog" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              className="qrw-viewer-close"
-              onClick={() => setViewerPhoto(null)}
-              aria-label="Close full size view"
-            >
-              <X size={20} />
-            </button>
+          <div
+            className={`qrw-viewer-dialog${viewerDragging ? ' is-dragging' : ''}${viewerDismissing ? ' is-dismissing' : ''}`}
+            onClick={e => e.stopPropagation()}
+            onPointerDown={e => {
+              if (viewerDismissing || (e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('button')) return;
+              const now = performance.now();
+              viewerGestureRef.current = {
+                pointerId: e.pointerId,
+                startY: e.clientY,
+                lastY: e.clientY,
+                lastTime: now,
+                offsetY: 0,
+                velocityY: 0,
+              };
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              setViewerDragging(true);
+            }}
+            onPointerMove={e => {
+              const gesture = viewerGestureRef.current;
+              if (gesture.pointerId !== e.pointerId || viewerDismissing) return;
+              const now = performance.now();
+              const elapsed = Math.max(1, now - gesture.lastTime);
+              const offsetY = e.clientY - gesture.startY;
+              gesture.velocityY = (e.clientY - gesture.lastY) / elapsed;
+              gesture.lastY = e.clientY;
+              gesture.lastTime = now;
+              gesture.offsetY = offsetY;
+              setViewerDragY(offsetY);
+            }}
+            onPointerUp={e => {
+              const gesture = viewerGestureRef.current;
+              if (gesture.pointerId !== e.pointerId) return;
+              gesture.pointerId = null;
+              e.currentTarget.releasePointerCapture?.(e.pointerId);
+              setViewerDragging(false);
+
+              if (shouldDismissViewerDrag(gesture)) {
+                viewerScrollTransferRef.current = {
+                  offsetY: gesture.offsetY,
+                  velocityY: gesture.velocityY,
+                };
+                setViewerDismissing(true);
+                setViewerDragY(getViewerDismissTarget(gesture.offsetY || gesture.velocityY, window.innerHeight));
+                viewerDismissTimerRef.current = window.setTimeout(closeViewer, 220);
+              } else {
+                setViewerDragY(0);
+              }
+            }}
+            onPointerCancel={e => {
+              if (viewerGestureRef.current.pointerId !== e.pointerId) return;
+              viewerGestureRef.current.pointerId = null;
+              setViewerDragging(false);
+              setViewerDragY(0);
+            }}
+            style={{
+              transform: `translate3d(0, ${viewerDragY}px, 0) scale(${getViewerDragPresentation(viewerDragY, window.innerHeight).scale})`,
+            }}
+          >
+            <div className="qrw-viewer-toolbar">
+              <button
+                type="button"
+                className="qrw-viewer-close"
+                onClick={closeViewer}
+                aria-label="Close full size view"
+              >
+                <X size={15} strokeWidth={1.8} />
+              </button>
+            </div>
             <div className="qrw-viewer-image-wrap">
               <img
                 className="qrw-viewer-image"
                 src={viewerPhoto.images?.large || viewerPhoto.images?.feed || api.imageUrl(wallToken, viewerPhoto.id)}
                 alt={viewerPhoto.caption || `Photo by ${viewerPhoto.uploadedBy}`}
+                draggable="false"
               />
             </div>
             <div className="qrw-viewer-meta">

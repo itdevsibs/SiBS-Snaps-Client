@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getHeaderVisibility } from '../src/pages/qr-wall/qrWallHeaderVisibility.js';
+import { getHeaderPresentationClass, getHeaderVisibility } from '../src/pages/qr-wall/qrWallHeaderVisibility.js';
 
 test('keeps the mobile header visible at the top of the page', () => {
   assert.equal(getHeaderVisibility({ previousY: 120, currentY: 0, visible: false }), true);
@@ -18,4 +18,11 @@ test('reveals the mobile header after a meaningful upward scroll', () => {
 test('ignores tiny scroll movements that would make the header jitter', () => {
   assert.equal(getHeaderVisibility({ previousY: 100, currentY: 104, visible: true }), true);
   assert.equal(getHeaderVisibility({ previousY: 100, currentY: 96, visible: false }), false);
+});
+
+test('suspends the header while either modal is open', () => {
+  assert.equal(getHeaderPresentationClass({ visible: true, modalOpen: true }), 'is-visible is-suspended');
+  assert.equal(getHeaderPresentationClass({ visible: false, modalOpen: true }), 'is-hidden is-suspended');
+  assert.equal(getHeaderPresentationClass({ visible: true, modalOpen: false }), 'is-visible');
+  assert.equal(getHeaderPresentationClass({ visible: false, modalOpen: false }), 'is-hidden');
 });
