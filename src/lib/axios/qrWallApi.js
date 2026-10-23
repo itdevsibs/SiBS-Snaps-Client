@@ -48,11 +48,29 @@ export function createQrWallApi(http) {
     moderatorRetryDeletionCleanup: () => request(http.post(`${prefix}/moderator/photos/deletion-cleanup`, {})),
     moderatorPhotoUrl: id => apiUrl(`/moderator/photos/${encodeURIComponent(id)}/image`),
     moderatorDownload: async id => (await http.get(`${prefix}/moderator/photos/${encodeURIComponent(id)}/download`, { responseType: 'blob' })).data,
-    getActive: () => request(http.get(`${prefix}/public/active`)),
-    getEvent: token => request(http.get(`${prefix}/public/${safeToken(token)}`)),
-    getFeed: (token, before, limit = 30) => request(http.get(`${prefix}/public/${safeToken(token)}/feed`, {
+    getActive: (options = {}) => request(http.get(`${prefix}/public/active`, { signal: options?.signal })),
+    getEvent: (token, options = {}) => request(http.get(`${prefix}/public/${safeToken(token)}`, { signal: options?.signal })),
+    getPhotos: (token, cursor = null, limit = 10, options = {}) => {
+      const params = { limit, ...(cursor ? { cursor } : {}) };
+      return request(http.get(`${prefix}/public/${safeToken(token)}/photos`, {
+        params,
+        headers: reactionDeviceHeader(),
+        signal: options?.signal,
+      })).catch(err => {
+        if (err?.response?.status === 404 && http.get) {
+          return request(http.get(`${prefix}/public/${safeToken(token)}/feed`, {
+            params: { limit, ...(cursor ? { before: cursor } : {}) },
+            headers: reactionDeviceHeader(),
+            signal: options?.signal,
+          }));
+        }
+        throw err;
+      });
+    },
+    getFeed: (token, before, limit = 30, options = {}) => request(http.get(`${prefix}/public/${safeToken(token)}/feed`, {
       params: { limit, ...(before ? { before } : {}) },
       headers: reactionDeviceHeader(),
+      signal: options?.signal,
     })),
     react: (token, photoId) => {
       const headers = reactionDeviceHeader();

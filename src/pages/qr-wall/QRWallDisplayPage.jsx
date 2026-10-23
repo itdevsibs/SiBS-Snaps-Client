@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { readableQrWallError } from '../../lib/axios/qrWallApi';
 import HeartBurst from '../../components/qr-wall/HeartBurst';
+import { splitCaption } from '../../components/qr-wall/captionText';
+import { applyReactionChange, hasReactionIncrease, resolveRenderedPhoto } from './qrWallDisplayState';
 import './qrWall.css';
 import './anniversaryDisplay.css';
 
@@ -51,10 +53,16 @@ export default function QRWallDisplayPage({ api }) {
   const [desiredId, setDesiredId] = useState(null);
   const [visibleId, setVisibleId] = useState(null);
   const [outgoingId, setOutgoingId] = useState(null);
+  const [visiblePhotoSnapshot, setVisiblePhotoSnapshot] = useState(null);
+  const [outgoingPhotoSnapshot, setOutgoingPhotoSnapshot] = useState(null);
   const [playing, setPlaying] = useState(true);
   const [heartBurst, setHeartBurst] = useState(null);
   const burstSequenceRef = useRef(0);
   const lastBurstSlideRef = useRef({ token: null, photoId: null, count: 0 });
+  const reactionCountsRef = useRef(new Map());
+  const reactionPopSequenceRef = useRef(0);
+  const reactionPopTimerRef = useRef(null);
+  const [reactionPop, setReactionPop] = useState(null);
   const [showQr, setShowQr] = useState(false);
   const [imageUnavailable, setImageUnavailable] = useState(false);
   const [imageWarning, setImageWarning] = useState(false);
@@ -70,6 +78,7 @@ export default function QRWallDisplayPage({ api }) {
   const decodedSlidesRef = useRef(new Map());
   const moderationRevisionRef = useRef(null);
   useEffect(() => () => {
+    window.clearTimeout(reactionPopTimerRef.current);
     for (const objectUrl of decodedSlidesRef.current.values()) URL.revokeObjectURL(objectUrl);
     decodedSlidesRef.current.clear();
   }, []);
@@ -92,10 +101,9 @@ export default function QRWallDisplayPage({ api }) {
 
   const photoIds = useMemo(() => photos.map(photo => String(photo.id)), [photos]);
   const count = photos.length;
-  const currentPhoto = photos.find(photo => String(photo.id) === visibleId) || null;
-  const outgoingPhoto = photos.find(photo => String(photo.id) === outgoingId) || null;
+  const currentPhoto = resolveRenderedPhoto(photos, visibleId, visiblePhotoSnapshot);
+  const outgoingPhoto = resolveRenderedPhoto(photos, outgoingId, outgoingPhotoSnapshot);
   const slideIndex = Math.max(0, photoIds.indexOf(visibleId));
-  const photoIdsKey = photoIds.join('|');
   const liveEvent = event && VALID_TOKEN.test(event.token || '') ? event : null;
 
   // Central, monotonic trigger: a new burst restarts even if its count is the
@@ -107,12 +115,24 @@ export default function QRWallDisplayPage({ api }) {
     setHeartBurst({ sequence: burstSequenceRef.current, photoId: String(photoId), count: total });
   }, []);
 
+  const playReactionPop = useCallback((photoId) => {
+    if (!photoId) return;
+    reactionPopSequenceRef.current += 1;
+    setReactionPop({ sequence: reactionPopSequenceRef.current, photoId: String(photoId) });
+    window.clearTimeout(reactionPopTimerRef.current);
+    reactionPopTimerRef.current = window.setTimeout(() => setReactionPop(null), 900);
+  }, []);
+
   // Run when a photo with existing reactions first appears, whenever the
   // slideshow returns to it, or when its reaction total increases live.
   // Ignore ordinary six-second feed polls and comment-only updates.
   useEffect(() => {
     if (!visibleId || !currentPhoto || !liveEvent) return;
     const total = Math.max(0, Math.trunc(Number(currentPhoto.reactionCount) || 0));
+    const reactionKey = `${liveEvent.token}:${visibleId}`;
+    const previousTotal = reactionCountsRef.current.get(reactionKey);
+    const gainedReaction = hasReactionIncrease(previousTotal, total);
+    reactionCountsRef.current.set(reactionKey, total);
     const old = lastBurstSlideRef.current;
     const changedPhoto = old.photoId !== visibleId || old.token !== liveEvent.token;
     const newReaction = !changedPhoto && total > old.count;
@@ -120,7 +140,8 @@ export default function QRWallDisplayPage({ api }) {
     if (total > 0 && (changedPhoto || newReaction)) {
       playHeartBurst(visibleId, total);
     }
-  }, [visibleId, currentPhoto?.reactionCount, liveEvent?.token, playHeartBurst]);
+    if (gainedReaction) playReactionPop(visibleId);
+  }, [visibleId, currentPhoto?.reactionCount, liveEvent?.token, playHeartBurst, playReactionPop]);
 
   const getFirstPage = useCallback(async (token, reset = false) => {
     if (!VALID_TOKEN.test(token || '')) return;
@@ -142,11 +163,8 @@ export default function QRWallDisplayPage({ api }) {
     if (resetFeed) {
       cursorRef.current = response.nextCursor || null;
       setCursor(response.nextCursor || null);
-      if (moderationChanged) {
-        currentPhotoRef.current = null;
-        setVisibleId(null);
-        setOutgoingId(null);
-      }
+      // Do not clear the rendered frame for moderation changes. The slideshow
+      // transitions normally after the replacement image has decoded.
     }
     setError('');
   }, [api]);
@@ -165,7 +183,10 @@ export default function QRWallDisplayPage({ api }) {
         currentPhotoRef.current = null;
         moderationRevisionRef.current = null;
         lastBurstSlideRef.current = { token: null, photoId: null, count: 0 };
+        reactionCountsRef.current.clear();
+        window.clearTimeout(reactionPopTimerRef.current);
         setHeartBurst(null);
+        setReactionPop(null);
         // An image from a previous event must not remain cached or visible.
         for (const objectUrl of decodedSlidesRef.current.values()) URL.revokeObjectURL(objectUrl);
         decodedSlidesRef.current.clear();
@@ -174,6 +195,8 @@ export default function QRWallDisplayPage({ api }) {
         setVisibleId(null);
         setDesiredId(null);
         setOutgoingId(null);
+        setVisiblePhotoSnapshot(null);
+        setOutgoingPhotoSnapshot(null);
         if (next?.token) await getFirstPage(next.token, true);
       }
       setError('');
@@ -216,8 +239,15 @@ export default function QRWallDisplayPage({ api }) {
     if (!liveEvent) return undefined;
     const token = liveEvent.token;
     const refresh = () => getFirstPage(token).catch(err => setError(readableQrWallError(err)));
+    const handleChange = eventMessage => {
+      try {
+        const change = JSON.parse(eventMessage.data || '{}');
+        setPhotos(previous => applyReactionChange(previous, change));
+      } catch { /* Feed refresh below remains authoritative. */ }
+      refresh();
+    };
     const stream = typeof EventSource !== 'undefined' ? new EventSource(api.streamUrl(token)) : null;
-    stream?.addEventListener('change', refresh);
+    stream?.addEventListener('change', handleChange);
     const poll = window.setInterval(refresh, 6000);
     return () => { stream?.close(); window.clearInterval(poll); };
   }, [api, liveEvent?.token, getFirstPage]);
@@ -232,6 +262,11 @@ export default function QRWallDisplayPage({ api }) {
     if (!photos.length) {
       setDesiredId(null);
       newestIdRef.current = null;
+      currentPhotoRef.current = null;
+      setVisibleId(null);
+      setOutgoingId(null);
+      setVisiblePhotoSnapshot(null);
+      setOutgoingPhotoSnapshot(null);
       return;
     }
     const newest = String(photos[0].id);
@@ -255,11 +290,15 @@ export default function QRWallDisplayPage({ api }) {
     const controller = new AbortController();
     const selectVisible = () => {
       if (cancelled) return;
+      const selectedPhoto = photos.find(photo => String(photo.id) === desiredId);
+      if (!selectedPhoto) return;
       setImageWarning(false);
       setImageUnavailable(false);
       if (currentPhotoRef.current !== desiredId) {
         const oldId = currentPhotoRef.current;
         currentPhotoRef.current = desiredId;
+        setOutgoingPhotoSnapshot(currentPhoto);
+        setVisiblePhotoSnapshot(selectedPhoto);
         setOutgoingId(oldId);
         setVisibleId(desiredId);
       }
@@ -272,7 +311,8 @@ export default function QRWallDisplayPage({ api }) {
     const loadAndDecode = async () => {
       let objectUrl = null;
       try {
-        const requestUrl = api.imageUrl(liveEvent.token, desiredId);
+        const selected = photos.find(photo => String(photo.id) === desiredId);
+        const requestUrl = selected?.images?.large || selected?.images?.feed || api.imageUrl(liveEvent.token, desiredId);
         const url = retryCycle > 0 ? `${requestUrl}${requestUrl.includes('?') ? '&' : '?'}attempt=${retryCycle}` : requestUrl;
         const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
         if (!response.ok || !response.headers.get('content-type')?.toLowerCase().startsWith('image/')) {
@@ -320,7 +360,10 @@ export default function QRWallDisplayPage({ api }) {
 
   useEffect(() => {
     if (!outgoingId) return undefined;
-    const timer = window.setTimeout(() => setOutgoingId(null), CROSSFADE_MS);
+    const timer = window.setTimeout(() => {
+      setOutgoingId(null);
+      setOutgoingPhotoSnapshot(null);
+    }, CROSSFADE_MS);
     return () => window.clearTimeout(timer);
   }, [outgoingId, visibleId]);
 
@@ -342,14 +385,15 @@ export default function QRWallDisplayPage({ api }) {
   const advanceRef = useRef(advance);
   advanceRef.current = advance;
 
-  // Only restart autoplay after a real slide/playlist change or pause/resume.
+  // Only restart autoplay after a real slide change or pause/resume. Feed
+  // moderation must not restart the timer or interrupt the slide animation.
   // When a photo fails to decode, the existing error handler moves to the next
   // one; the counter still includes all uploaded photos.
   useEffect(() => {
     if (!playing || !visibleId || photoIds.length < 2 || desiredId !== visibleId) return undefined;
     const timer = window.setTimeout(() => advanceRef.current(1), SLIDE_DURATION_MS);
     return () => window.clearTimeout(timer);
-  }, [playing, visibleId, desiredId, photoIdsKey]);
+  }, [playing, visibleId, desiredId]);
 
   // Retry failed files on later cycles without permanently removing any records.
   useEffect(() => {
@@ -388,8 +432,8 @@ export default function QRWallDisplayPage({ api }) {
           <p>A Crystal Anniversary Celebration</p>
         </div>
         <div className="qrw-anniversary-status">
-          <div className="qrw-live-badge"><Radio size={18} aria-hidden="true"/><span>LIVE</span></div>
           <div className="qrw-shared-counter"><strong>{count.toLocaleString('en-PH')}</strong><span>Moments Shared</span></div>
+          <div className="qrw-live-badge"><Radio size={18} aria-hidden="true"/><span>LIVE</span></div>
           <button type="button" className="qrw-anniv-fullscreen" title="Toggle fullscreen" aria-label="Toggle fullscreen" onClick={openFullscreen}>
             <Maximize2 size={19} />
           </button>
@@ -419,6 +463,7 @@ export default function QRWallDisplayPage({ api }) {
                   <span>{liveEvent ? 'Scan the QR code to upload your photo.' : 'The event will appear here once it becomes active.'}</span>
                 </div>
               )}
+              <HeartBurst burst={heartBurst?.photoId === visibleId ? heartBurst : null} variant="display" />
             </div>
             <div className="qrw-anniversary-post">
               <div className="qrw-anniversary-post-head">
@@ -427,20 +472,37 @@ export default function QRWallDisplayPage({ api }) {
                 <span className="qrw-anniv-more" aria-hidden="true">•••</span>
               </div>
               <div className="qrw-anniversary-caption">
-                <p key={currentPhoto?.id || 'empty'}>{currentPhoto?.caption || 'Every moment is worth celebrating together. 💙'}</p>
+                <p key={currentPhoto?.id || 'empty'}>
+                  {splitCaption(currentPhoto?.caption || 'Every moment is worth celebrating together. 💙')
+                    .map((part, index) => (
+                      <span className={part.isHashtag ? 'qrw-caption-hashtag' : undefined}
+                        key={`${index}-${part.text}`}>{part.text}</span>
+                    ))}
+                </p>
               </div>
               <div className="qrw-anniv-actions">
                 <button type="button" className="qrw-anniv-reaction"
                   title="Replay heart celebration animation" aria-label={`Celebrate ${currentPhoto?.uploadedBy || 'this photo'}: replay hearts`}
                   disabled={!currentPhoto || Number(currentPhoto.reactionCount || 0) < 1}
-                  onClick={() => playHeartBurst(visibleId, currentPhoto?.reactionCount)}>
-                  <Heart size={29} fill="currentColor" />
-                  <span>{Number(currentPhoto?.reactionCount || 0)} {Number(currentPhoto?.reactionCount || 0) === 1 ? 'reaction' : 'reactions'}</span>
+                  onClick={() => {
+                    playHeartBurst(visibleId, currentPhoto?.reactionCount);
+                    playReactionPop(visibleId);
+                  }}>
+                  <span key={`${visibleId}-${reactionPop?.photoId === visibleId ? reactionPop.sequence : 'idle'}`}
+                    className={`qrw-reaction-pop-content${reactionPop?.photoId === visibleId ? ' is-popping' : ''}`}>
+                    <span className="qrw-reaction-pop-visual" aria-hidden="true">
+                      <span className="qrw-reaction-pop-ring" />
+                      <Heart className="qrw-reaction-pop-heart" size={29} fill="currentColor" />
+                      <span className="qrw-reaction-pop-sparks">
+                        <i /><i /><i /><i />
+                      </span>
+                    </span>
+                    <span className="qrw-reaction-pop-label">{Number(currentPhoto?.reactionCount || 0)} {Number(currentPhoto?.reactionCount || 0) === 1 ? 'reaction' : 'reactions'}</span>
+                  </span>
                 </button>
                 <button type="button" onClick={() => setShowQr(true)} aria-label="Show QR code to share a photo"><Share2 size={29}/><span>Share</span></button>
               </div>
             </div>
-            <HeartBurst burst={heartBurst?.photoId === visibleId ? heartBurst : null} variant="display" />
           </section>
           <button className="qrw-anniversary-arrow qrw-anniversary-arrow-right" type="button" onClick={() => advance(1)}
             disabled={count < 2} aria-label="Next photo"><ChevronRight size={37} /></button>
