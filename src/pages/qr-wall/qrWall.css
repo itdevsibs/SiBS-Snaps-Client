@@ -867,6 +867,82 @@ textarea.qrw-field { resize:vertical; }
   to { transform: scale(1) translateY(0); opacity: 1; }
 }
 
+.qrw-upload-confirmation-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(10, 20, 42, 0.72);
+  backdrop-filter: blur(4px);
+  animation: qrw-modal-fade 0.18s ease-out;
+}
+.qrw-upload-confirmation {
+  position: relative;
+  width: min(100%, 350px);
+  padding: 30px 28px 27px;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #162744;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(12, 23, 50, 0.3);
+  outline: none;
+  animation: qrw-upload-confirmation-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.qrw-upload-confirmation-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #62738c;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.qrw-upload-confirmation-close:hover {
+  color: #162744;
+  transform: scale(1.08);
+}
+.qrw-upload-confirmation-close:focus-visible {
+  outline: 2px solid #6aa7ef;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.qrw-upload-confirmation-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 15px;
+  border-radius: 50%;
+  background: #eaf3ff;
+  color: #1d5db5;
+}
+.qrw-upload-confirmation h2 {
+  margin: 0;
+  color: #162744;
+  font-size: 21px;
+  font-weight: 850;
+  letter-spacing: -0.35px;
+}
+.qrw-upload-confirmation p {
+  margin: 9px 0 0;
+  color: #687a94;
+  font-size: 13px;
+  line-height: 1.55;
+}
+@keyframes qrw-upload-confirmation-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .qrw-create-modal-header {
   position: relative;
   flex: none;
@@ -1056,6 +1132,9 @@ textarea.qrw-field { resize:vertical; }
 @media (prefers-reduced-motion: reduce) {
   .qrw-create-modal-backdrop,
   .qrw-create-modal,
+  .qrw-upload-confirmation-backdrop,
+  .qrw-upload-confirmation,
+  .qrw-upload-confirmation-close,
   .qrw-composer-avatar,
   .qrw-composer-trigger,
   .qrw-composer-action-btn,
