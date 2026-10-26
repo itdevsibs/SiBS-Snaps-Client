@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowUp, Camera, CheckCircle2, ImagePlus, Send, UserRound, X } from 'lucide-react';
+import { ArrowUp, Camera, CheckCircle2, ImagePlus, LoaderCircle, RotateCcw, Send, Trash2, UserRound, X } from 'lucide-react';
 import PhotoPost from '../../components/qr-wall/PhotoPost';
 import { readableQrWallError, readableUploadError } from '../../lib/axios/qrWallApi';
 import { applyReactionChange } from './qrWallDisplayState';
 import {
   MAX_PHOTO_BYTES,
   appendFeedPhotos,
+  isGifUpload,
   parsePhotosResponse,
   prefetchImages,
   prependFeedPhotos,
@@ -28,14 +29,9 @@ import {
 } from './qrWallCreateSheetDrag';
 import {
   UPLOAD_CONFIRMATION_DURATION_MS,
-  isConfirmedPhotoUpload,
 } from './qrWallUploadConfirmation';
-import {
-  createUploadRequestId,
-  isUncertainUploadError,
-  reconcileUploadStatus,
-  uploadProgressLabel,
-} from './qrWallUploadReliability';
+import { createUploadRequestId } from './qrWallUploadReliability';
+import { useQrWallUploadQueue } from './useQrWallUploadQueue';
 import './qrWall.css';
 
 const PAGE_SIZE = 10;
@@ -75,10 +71,9 @@ export default function QRWallJoinPage({ api, token }) {
 
   const [name, setName] = useState(() => sessionStorage.getItem('qr-wall-guest-name') || '');
   const [files, setFiles] = useState([]);
-  const [uploadProgress, setUploadProgress] = useState('');
-  const [uncertainUploadId, setUncertainUploadId] = useState(null);
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
+  const [completedUploadNoticeToken, setCompletedUploadNoticeToken] = useState(null);
   const [reactBusyIds, setReactBusyIds] = useState(() => new Set());
   const [error, setError] = useState(() => wallToken ? '' : 'Invalid photo wall link. Scan the QR code on the display again.');
   const [viewerPhoto, setViewerPhoto] = useState(null);
@@ -103,14 +98,7 @@ export default function QRWallJoinPage({ api, token }) {
   const createSheetDismissTimerRef = useRef(null);
   const uploadConfirmationTimerRef = useRef(null);
   const uploadConfirmationDialogRef = useRef(null);
-  const uploadRequestIdRef = useRef(null);
-  const uploadInFlightRef = useRef(false);
   const modalOpenRef = useRef(false);
-
-  useEffect(() => {
-    uploadRequestIdRef.current = null;
-    uploadInFlightRef.current = false;
-  }, [wallToken]);
 
   useEffect(() => {
     modalOpenRef.current = Boolean(viewerPhoto || showCreateModal || showUploadConfirmation);
@@ -151,7 +139,7 @@ export default function QRWallJoinPage({ api, token }) {
     setViewerPhoto(null);
     setShowCreateModal(false);
     setShowUploadConfirmation(false);
-    setUncertainUploadId(null);
+    setCompletedUploadNoticeToken(null);
     setLoading(Boolean(wallToken));
     setError(wallToken ? '' : 'Invalid photo wall link. Scan the QR code on the display again.');
   }
@@ -479,12 +467,6 @@ export default function QRWallJoinPage({ api, token }) {
 
   const clearAlerts = () => { setError(''); };
 
-  const resetUploadIdentity = useCallback(() => {
-    uploadRequestIdRef.current = null;
-    setUncertainUploadId(null);
-    setUploadProgress('');
-  }, []);
-
   const resetCreateSheetMotion = useCallback(() => {
     setCreateSheetDragY(0);
     setCreateSheetDragging(false);
@@ -515,6 +497,26 @@ export default function QRWallJoinPage({ api, token }) {
       UPLOAD_CONFIRMATION_DURATION_MS,
     );
   }, [clearUploadConfirmationTimer, dismissUploadConfirmation]);
+
+  const handleQueuedUploadConfirmed = useCallback(async item => {
+    setCompletedUploadNoticeToken(item.eventToken);
+    await refreshFirstPage().catch(() => {});
+  }, [refreshFirstPage]);
+
+  const uploadQueue = useQrWallUploadQueue({
+    api,
+    eventToken: wallToken,
+    onConfirmed: handleQueuedUploadConfirmed,
+  });
+
+  useEffect(() => {
+    if (completedUploadNoticeToken !== wallToken || showCreateModal || showUploadConfirmation) return;
+    const timer = window.setTimeout(() => {
+      setCompletedUploadNoticeToken(null);
+      openUploadConfirmation();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [completedUploadNoticeToken, openUploadConfirmation, showCreateModal, showUploadConfirmation, wallToken]);
 
   const openCreateModal = useCallback((autoTriggerFile = false) => {
     dismissUploadConfirmation(false);
@@ -614,8 +616,9 @@ export default function QRWallJoinPage({ api, token }) {
       setModalError(`"${selected[0].name}" exceeds the 10 MB limit.`);
     } else if (selected[0]?.size === 0) {
       setModalError('The selected photo is empty.');
+    } else if (isGifUpload(selected[0])) {
+      setModalError('GIF images are not supported. Choose a JPG, PNG, WebP, AVIF, HEIC, or HEIF photo.');
     } else {
-      resetUploadIdentity();
       setFiles(selected);
       setModalError('');
     }
@@ -623,14 +626,13 @@ export default function QRWallJoinPage({ api, token }) {
   };
 
   const handleRemovePhoto = () => {
-    resetUploadIdentity();
     setFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const onUpload = async eventData => {
     if (eventData) eventData.preventDefault();
-    if (busy || uploadInFlightRef.current) return;
+    if (busy) return;
     setModalError('');
     clearAlerts();
 
@@ -645,119 +647,28 @@ export default function QRWallJoinPage({ api, token }) {
       return;
     }
 
-    const file = files[0];
-    let requestId;
-    try {
-      requestId = uploadRequestIdRef.current || createUploadRequestId();
-      uploadRequestIdRef.current = requestId;
-    } catch (err) {
-      const readable = readableQrWallError(err, 'Could not prepare this upload. Please try again.');
-      setModalError(readable);
-      setError(readable);
-      return;
-    }
-    uploadInFlightRef.current = true;
     setBusy(true);
-    setUploadProgress(uncertainUploadId ? 'Checking upload status…' : 'Preparing upload…');
-
-    const confirmUpload = async () => {
+    try {
+      const requestId = createUploadRequestId();
+      sessionStorage.setItem('qr-wall-guest-name', name.trim());
+      const queued = await uploadQueue.enqueue({
+        requestId,
+        author: name.trim(),
+        caption,
+        file: files[0],
+      });
+      if (!queued) return;
       setFiles([]);
       setCaption('');
-      setUncertainUploadId(null);
-      uploadRequestIdRef.current = null;
       if (fileInputRef.current) fileInputRef.current.value = '';
       resetCreateSheetMotion();
       setShowCreateModal(false);
-      openUploadConfirmation();
-      await refreshFirstPage().catch(() => {});
-    };
-
-    const checkStatus = () => reconcileUploadStatus({
-      requestId,
-      checkStatus: () => api.uploadStatus(wallToken, requestId),
-    });
-
-    try {
-      if (uncertainUploadId) {
-        const status = await checkStatus();
-        if (status.state === 'committed') {
-          await confirmUpload();
-          return;
-        }
-        if (status.state === 'failed') {
-          setUncertainUploadId(null);
-          throw new Error('The server confirmed that the upload did not complete. Your photo is still available to retry.');
-        }
-        if (status.state === 'unknown') {
-          setUncertainUploadId(null);
-          setModalError('The server has no record of this upload. You can retry safely; the same upload ID will prevent duplicates.');
-          return;
-        }
-        setModalError('Your upload is still processing. Do not submit it again; check the status shortly.');
-        return;
-      }
-
-      sessionStorage.setItem('qr-wall-guest-name', name.trim());
-      const response = await api.upload(wallToken, {
-        author: name.trim(),
-        caption,
-        photos: [file],
-        requestId,
-        onUploadProgress: progressEvent => setUploadProgress(uploadProgressLabel(progressEvent)),
-      });
-      if (response?.state === 'processing') {
-        setUploadProgress('Confirming upload status…');
-        const status = await checkStatus();
-        if (status.state === 'committed') {
-          await confirmUpload();
-          return;
-        }
-        if (status.state === 'failed') {
-          throw new Error('The server confirmed that the upload did not complete. Your photo is still available to retry.');
-        }
-        setUncertainUploadId(requestId);
-        setModalError('Your upload is still processing. Do not submit it again; use Check upload status shortly.');
-        return;
-      }
-      if (!isConfirmedPhotoUpload(response)) {
-        throw new Error('The server did not confirm this upload. Check with the moderator before retrying.');
-      }
-      await confirmUpload();
     } catch (err) {
-      if (isUncertainUploadError(err)) {
-        setUploadProgress('Confirming upload status…');
-        const status = await checkStatus();
-        if (status.state === 'committed') {
-          await confirmUpload();
-          return;
-        }
-        if (status.state === 'processing') {
-          const uncertainMessage = 'The connection ended before confirmation. Your upload may still be processing—do not submit it again. Use Check upload status.';
-          setUncertainUploadId(requestId);
-          setModalError(uncertainMessage);
-          setError(uncertainMessage);
-          return;
-        }
-        if (status.state === 'unknown') {
-          const retryMessage = 'The connection ended before the server recorded this upload. You can retry safely; the same upload ID will prevent duplicates.';
-          setUncertainUploadId(null);
-          setModalError(retryMessage);
-          setError(retryMessage);
-          return;
-        }
-        const failedMessage = 'The server confirmed that the upload did not complete. Your photo is still available to retry.';
-        setUncertainUploadId(null);
-        setModalError(failedMessage);
-        setError(failedMessage);
-        return;
-      }
-      const readable = readableQrWallError(err, 'Photo upload failed. Your selection is still available for retry.');
+      const readable = readableQrWallError(err, 'Could not add this photo to the upload queue. Please try again.');
       setModalError(readable);
       setError(readable);
     } finally {
-      uploadInFlightRef.current = false;
       setBusy(false);
-      setUploadProgress('');
     }
   };
 
@@ -814,6 +725,38 @@ export default function QRWallJoinPage({ api, token }) {
         {!loading && !event ? <div className="qrw-alert qrw-alert-error">This QR link is invalid or unavailable.</div> : null}
         {event ? <>
           {closed ? <div className="qrw-alert">This event has ended. You can still browse the photos.</div> : null}
+          {uploadQueue.items.length || uploadQueue.persistenceWarning ? (
+            <section className="qrw-upload-queue" aria-live="polite" aria-label="Photo upload queue">
+              <div className="qrw-upload-queue-head">
+                <span className="qrw-upload-queue-title">
+                  {uploadQueue.summary.activeRequestId ? <LoaderCircle size={16} className="qrw-upload-queue-spinner" /> : null}
+                  <strong>{uploadQueue.summary.label || `${uploadQueue.summary.total} pending upload${uploadQueue.summary.total === 1 ? '' : 's'}`}</strong>
+                </span>
+                {uploadQueue.summary.queued ? <small>{uploadQueue.summary.queued} queued</small> : null}
+              </div>
+              {uploadQueue.persistenceWarning ? <p className="qrw-upload-queue-warning">{uploadQueue.persistenceWarning}</p> : null}
+              {uploadQueue.items.map(item => (
+                <div className={`qrw-upload-queue-item qrw-upload-queue-item--${item.status}`} key={item.requestId}>
+                  <span>
+                    <strong>{item.fileName}</strong>
+                    <small>{item.error || item.progress || 'Queued for upload'}</small>
+                  </span>
+                  <span className="qrw-upload-queue-actions">
+                    {['failed', 'uncertain'].includes(item.status) ? (
+                      <button type="button" onClick={() => uploadQueue.retry(item)}>
+                        <RotateCcw size={14} /> {item.status === 'uncertain' ? 'Check status' : 'Retry'}
+                      </button>
+                    ) : null}
+                    {['queued', 'failed', 'uncertain'].includes(item.status) ? (
+                      <button type="button" onClick={() => uploadQueue.remove(item.requestId)} aria-label={`Remove ${item.fileName} from queue`}>
+                        <Trash2 size={14} />
+                      </button>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+            </section>
+          ) : null}
           {!closed ? (
             <div className="qrw-composer-card">
               <div className="qrw-composer-top">
@@ -1018,7 +961,6 @@ export default function QRWallJoinPage({ api, token }) {
                   disabled={busy}
                   placeholder="What should we call you?"
                   onChange={e => {
-                    resetUploadIdentity();
                     setName(e.target.value);
                     if (modalError) setModalError('');
                   }}
@@ -1042,7 +984,7 @@ export default function QRWallJoinPage({ api, token }) {
                       ref={fileInputRef}
                       className="qrw-visually-hidden"
                       type="file"
-                      accept="image/*,.heic,.heif"
+                      accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif"
                       disabled={busy}
                       onChange={handleFileSelect}
                     />
@@ -1086,7 +1028,7 @@ export default function QRWallJoinPage({ api, token }) {
                       ref={fileInputRef}
                       className="qrw-visually-hidden"
                       type="file"
-                      accept="image/*,.heic,.heif"
+                      accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif"
                       disabled={busy}
                       onChange={handleFileSelect}
                     />
@@ -1108,7 +1050,6 @@ export default function QRWallJoinPage({ api, token }) {
                   disabled={busy}
                   placeholder="Tell us about this moment…"
                   onChange={e => {
-                    resetUploadIdentity();
                     setCaption(e.target.value);
                   }}
                 />
@@ -1119,9 +1060,7 @@ export default function QRWallJoinPage({ api, token }) {
                 disabled={busy || !files.length || !name.trim() || !caption.trim()}
                 type="submit"
               >
-                <Send size={16} /> {busy
-                  ? (uploadProgress || 'Submitting…')
-                  : (uncertainUploadId ? 'Check upload status' : 'Submit photo for approval')}
+                <Send size={16} /> {busy ? 'Adding to queue…' : 'Submit photo for approval'}
               </button>
 
               <p className="qrw-small-print">

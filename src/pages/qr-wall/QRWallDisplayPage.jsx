@@ -523,10 +523,12 @@ export default function QRWallDisplayPage({ api }) {
         </div>
       </div>
       <aside className="qrw-anniv-years" aria-hidden="true"><span>15</span><strong>YEARS</strong></aside>
-      <div className="qrw-anniv-join-dock">
-        {liveEvent ? <img src={api.qrUrl(liveEvent.token)} alt="QR code to join SiBS Anniversary" onClick={() => setShowQr(true)} /> : <QrCode size={42} />}
-        <button type="button" onClick={() => setShowQr(true)} disabled={!liveEvent}><QrCode size={14}/> SCAN TO JOIN</button>
-      </div>
+      {liveEvent ? (
+        <div className="qrw-anniv-join-dock">
+          <img src={api.qrUrl(liveEvent.token)} alt="QR code to join SiBS Anniversary" onClick={() => setShowQr(true)} />
+          <button type="button" onClick={() => setShowQr(true)}><QrCode size={14}/> SCAN TO JOIN</button>
+        </div>
+      ) : null}
       {showQr && liveEvent ? (
         <div className="qrw-anniv-qr-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setShowQr(false); }}>
           <div className="qrw-anniv-qr-dialog" role="dialog" aria-modal="true" aria-label="Scan to join the live photo wall">

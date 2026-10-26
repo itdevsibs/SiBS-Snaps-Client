@@ -60,9 +60,16 @@ test('required validation: enforces author name, single photo, and 10 MB limit',
   assert.equal(emptyFile.valid, false);
   assert.equal(emptyFile.error, 'The selected photo is empty.');
 
-  const noCaption = validatePhotoSubmission({ name: 'Juan', caption: '   ', files: [{ name: 'pic.jpg', size: 100 }] });
-  assert.equal(noCaption.valid, false);
-  assert.equal(noCaption.error, 'Please enter a caption.');
+  // GIFs are not accepted, including when a browser omits the MIME type.
+  for (const file of [
+    { name: 'animation.gif', type: 'image/gif', size: 500 },
+    { name: 'animation.GIF', type: '', size: 500 },
+    { name: 'animation.gif', type: 'application/octet-stream', size: 500 },
+  ]) {
+    const gif = validatePhotoSubmission({ name: 'Juan Dela Cruz', files: [file] });
+    assert.equal(gif.valid, false);
+    assert.match(gif.error, /GIF images are not supported/);
+  }
 
   // Valid submission
   const valid = validatePhotoSubmission({
