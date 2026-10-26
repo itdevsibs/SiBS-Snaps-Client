@@ -7,7 +7,13 @@ import {
 import { readableQrWallError } from '../../lib/axios/qrWallApi';
 import HeartBurst from '../../components/qr-wall/HeartBurst';
 import { splitCaption } from '../../components/qr-wall/captionText';
-import { applyReactionChange, hasReactionIncrease, resolveRenderedPhoto } from './qrWallDisplayState';
+import {
+  applyReactionChange,
+  fetchDisplayImageBlob,
+  getDisplayImageCandidates,
+  hasReactionIncrease,
+  resolveRenderedPhoto,
+} from './qrWallDisplayState';
 import './qrWall.css';
 import './anniversaryDisplay.css';
 
@@ -100,6 +106,7 @@ export default function QRWallDisplayPage({ api }) {
 
 
   const photoIds = useMemo(() => photos.map(photo => String(photo.id)), [photos]);
+  const photoIdsKey = photoIds.join('|');
   const count = photos.length;
   const currentPhoto = resolveRenderedPhoto(photos, visibleId, visiblePhotoSnapshot);
   const outgoingPhoto = resolveRenderedPhoto(photos, outgoingId, outgoingPhotoSnapshot);
@@ -312,14 +319,11 @@ export default function QRWallDisplayPage({ api }) {
       let objectUrl = null;
       try {
         const selected = photos.find(photo => String(photo.id) === desiredId);
-        const requestUrl = selected?.images?.large || selected?.images?.feed || api.imageUrl(liveEvent.token, desiredId);
-        const url = retryCycle > 0 ? `${requestUrl}${requestUrl.includes('?') ? '&' : '?'}attempt=${retryCycle}` : requestUrl;
-        const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
-        if (!response.ok || !response.headers.get('content-type')?.toLowerCase().startsWith('image/')) {
-          throw new Error(`Photo endpoint unavailable (HTTP ${response.status})`);
-        }
-        const blob = await response.blob();
-        if (!blob.size) throw new Error('Photo returned no image bytes');
+        const fallbackUrl = api.imageUrl(liveEvent.token, desiredId);
+        const candidates = getDisplayImageCandidates(selected, fallbackUrl).map(requestUrl => retryCycle > 0
+          ? `${requestUrl}${requestUrl.includes('?') ? '&' : '?'}attempt=${retryCycle}`
+          : requestUrl);
+        const { blob } = await fetchDisplayImageBlob(candidates, { signal: controller.signal });
         objectUrl = URL.createObjectURL(blob);
         await decodePhotoObjectUrl(objectUrl);
         if (cancelled) return;
@@ -357,6 +361,49 @@ export default function QRWallDisplayPage({ api }) {
     // Depend on stable photo IDs, not the mutable feed data refreshed every 6s.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, liveEvent?.token, desiredId, retryCycle, rememberPhoto]);
+
+  // Decode the next optimized image during the current slide's seven-second
+  // display window. Autoplay can then switch immediately instead of waiting
+  // for a large SMB-backed image after the timer has already elapsed.
+  useEffect(() => {
+    if (!visibleId || !liveEvent || photoIds.length < 2) return undefined;
+    const position = photoIds.indexOf(visibleId);
+    const nextId = photoIds[(position + 1) % photoIds.length];
+    if (!nextId || decodedSlidesRef.current.has(nextId)) return undefined;
+    const nextPhoto = photos.find(photo => String(photo.id) === nextId);
+    if (!nextPhoto) return undefined;
+
+    let objectUrl = null;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const fallbackUrl = api.imageUrl(liveEvent.token, nextId);
+        const { blob } = await fetchDisplayImageBlob(
+          getDisplayImageCandidates(nextPhoto, fallbackUrl),
+          { signal: controller.signal },
+        );
+        objectUrl = URL.createObjectURL(blob);
+        await decodePhotoObjectUrl(objectUrl);
+        if (controller.signal.aborted) return;
+        rememberPhoto(nextId, objectUrl, visibleId);
+        objectUrl = null;
+      } catch (error) {
+        if (error?.name !== 'AbortError' && !controller.signal.aborted) {
+          console.warn('[SiBS-Snaps] Next display photo could not be prefetched', {
+            photoId: nextId,
+            message: error?.message,
+          });
+        }
+      } finally {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      }
+    })();
+
+    return () => controller.abort();
+    // Feed polling replaces photo objects every six seconds. The stable ID key
+    // keeps that refresh from canceling an in-flight prefetch unnecessarily.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, liveEvent?.token, visibleId, photoIdsKey, rememberPhoto]);
 
   useEffect(() => {
     if (!outgoingId) return undefined;
