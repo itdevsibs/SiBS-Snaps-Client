@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowUp, Camera, CheckCircle2, ImagePlus, Send, UserRound, X } from 'lucide-react';
+import { ArrowUp, Camera, CheckCircle2, ImagePlus, LoaderCircle, RotateCcw, Send, Trash2, UserRound, X } from 'lucide-react';
 import PhotoPost from '../../components/qr-wall/PhotoPost';
 import { readableQrWallError, readableUploadError } from '../../lib/axios/qrWallApi';
 import { applyReactionChange } from './qrWallDisplayState';
 import {
   MAX_PHOTO_BYTES,
   appendFeedPhotos,
+  isGifUpload,
   parsePhotosResponse,
   prefetchImages,
   prependFeedPhotos,
@@ -26,6 +27,11 @@ import {
   getCreateSheetDragOffset,
   shouldDismissCreateSheet,
 } from './qrWallCreateSheetDrag';
+import {
+  UPLOAD_CONFIRMATION_DURATION_MS,
+} from './qrWallUploadConfirmation';
+import { createUploadRequestId } from './qrWallUploadReliability';
+import { useQrWallUploadQueue } from './useQrWallUploadQueue';
 import './qrWall.css';
 
 const PAGE_SIZE = 10;
@@ -65,17 +71,17 @@ export default function QRWallJoinPage({ api, token }) {
 
   const [name, setName] = useState(() => sessionStorage.getItem('qr-wall-guest-name') || '');
   const [files, setFiles] = useState([]);
-  const [uploadProgress, setUploadProgress] = useState('');
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
+  const [completedUploadNoticeToken, setCompletedUploadNoticeToken] = useState(null);
   const [reactBusyIds, setReactBusyIds] = useState(() => new Set());
-  const [message, setMessage] = useState('');
   const [error, setError] = useState(() => wallToken ? '' : 'Invalid photo wall link. Scan the QR code on the display again.');
   const [viewerPhoto, setViewerPhoto] = useState(null);
   const [viewerDragY, setViewerDragY] = useState(0);
   const [viewerDragging, setViewerDragging] = useState(false);
   const [viewerDismissing, setViewerDismissing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showUploadConfirmation, setShowUploadConfirmation] = useState(false);
   const [modalError, setModalError] = useState('');
   const [createSheetDragY, setCreateSheetDragY] = useState(0);
   const [createSheetDragging, setCreateSheetDragging] = useState(false);
@@ -90,11 +96,13 @@ export default function QRWallJoinPage({ api, token }) {
   const viewerGestureRef = useRef({ pointerId: null, startY: 0, lastY: 0, lastTime: 0, offsetY: 0, velocityY: 0 });
   const createSheetGestureRef = useRef({ pointerId: null, startY: 0, lastY: 0, lastTime: 0, offsetY: 0, velocityY: 0 });
   const createSheetDismissTimerRef = useRef(null);
+  const uploadConfirmationTimerRef = useRef(null);
+  const uploadConfirmationDialogRef = useRef(null);
   const modalOpenRef = useRef(false);
 
   useEffect(() => {
-    modalOpenRef.current = Boolean(viewerPhoto || showCreateModal);
-  }, [viewerPhoto, showCreateModal]);
+    modalOpenRef.current = Boolean(viewerPhoto || showCreateModal || showUploadConfirmation);
+  }, [viewerPhoto, showCreateModal, showUploadConfirmation]);
 
   const resetViewerMotion = useCallback(() => {
     setViewerDragY(0);
@@ -130,6 +138,8 @@ export default function QRWallJoinPage({ api, token }) {
     setNewPostsQueue([]);
     setViewerPhoto(null);
     setShowCreateModal(false);
+    setShowUploadConfirmation(false);
+    setCompletedUploadNoticeToken(null);
     setLoading(Boolean(wallToken));
     setError(wallToken ? '' : 'Invalid photo wall link. Scan the QR code on the display again.');
   }
@@ -455,7 +465,7 @@ export default function QRWallJoinPage({ api, token }) {
     };
   }, [api, wallToken, refreshFirstPage]);
 
-  const clearAlerts = () => { setError(''); setMessage(''); };
+  const clearAlerts = () => { setError(''); };
 
   const resetCreateSheetMotion = useCallback(() => {
     setCreateSheetDragY(0);
@@ -464,7 +474,52 @@ export default function QRWallJoinPage({ api, token }) {
     createSheetGestureRef.current.pointerId = null;
   }, []);
 
+  const clearUploadConfirmationTimer = useCallback(() => {
+    if (uploadConfirmationTimerRef.current) {
+      window.clearTimeout(uploadConfirmationTimerRef.current);
+      uploadConfirmationTimerRef.current = null;
+    }
+  }, []);
+
+  const dismissUploadConfirmation = useCallback((restoreFocus = true) => {
+    clearUploadConfirmationTimer();
+    setShowUploadConfirmation(false);
+    if (restoreFocus && lastActiveElementRef.current && typeof lastActiveElementRef.current.focus === 'function') {
+      window.requestAnimationFrame(() => lastActiveElementRef.current?.focus());
+    }
+  }, [clearUploadConfirmationTimer]);
+
+  const openUploadConfirmation = useCallback(() => {
+    clearUploadConfirmationTimer();
+    setShowUploadConfirmation(true);
+    uploadConfirmationTimerRef.current = window.setTimeout(
+      () => dismissUploadConfirmation(),
+      UPLOAD_CONFIRMATION_DURATION_MS,
+    );
+  }, [clearUploadConfirmationTimer, dismissUploadConfirmation]);
+
+  const handleQueuedUploadConfirmed = useCallback(async item => {
+    setCompletedUploadNoticeToken(item.eventToken);
+    await refreshFirstPage().catch(() => {});
+  }, [refreshFirstPage]);
+
+  const uploadQueue = useQrWallUploadQueue({
+    api,
+    eventToken: wallToken,
+    onConfirmed: handleQueuedUploadConfirmed,
+  });
+
+  useEffect(() => {
+    if (completedUploadNoticeToken !== wallToken || showCreateModal || showUploadConfirmation) return;
+    const timer = window.setTimeout(() => {
+      setCompletedUploadNoticeToken(null);
+      openUploadConfirmation();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [completedUploadNoticeToken, openUploadConfirmation, showCreateModal, showUploadConfirmation, wallToken]);
+
   const openCreateModal = useCallback((autoTriggerFile = false) => {
+    dismissUploadConfirmation(false);
     lastActiveElementRef.current = document.activeElement;
     setModalError('');
     resetCreateSheetMotion();
@@ -474,7 +529,7 @@ export default function QRWallJoinPage({ api, token }) {
         fileInputRef.current?.click();
       }, 60);
     }
-  }, [files.length, resetCreateSheetMotion]);
+  }, [dismissUploadConfirmation, files.length, resetCreateSheetMotion]);
 
   const closeCreateModal = useCallback(() => {
     if (busy) return;
@@ -496,6 +551,25 @@ export default function QRWallJoinPage({ api, token }) {
     }
   }, []);
 
+  useEffect(() => () => clearUploadConfirmationTimer(), [clearUploadConfirmationTimer]);
+
+  useEffect(() => {
+    clearUploadConfirmationTimer();
+  }, [wallToken, clearUploadConfirmationTimer]);
+
+  useEffect(() => {
+    if (!showUploadConfirmation) return undefined;
+    const focusFrame = window.requestAnimationFrame(() => uploadConfirmationDialogRef.current?.focus());
+    const handleKeyDown = eventData => {
+      if (eventData.key === 'Escape') dismissUploadConfirmation();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showUploadConfirmation, dismissUploadConfirmation]);
+
   // Escape key closes modal
   useEffect(() => {
     if (!showCreateModal) return undefined;
@@ -508,15 +582,17 @@ export default function QRWallJoinPage({ api, token }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showCreateModal, busy, closeCreateModal]);
 
-  // Lock body scroll while Create Post modal is open
+  const createFlowModalOpen = showCreateModal || showUploadConfirmation;
+
+  // Keep the feed locked across the Create Post to confirmation handoff.
   useEffect(() => {
-    if (!showCreateModal) return undefined;
+    if (!createFlowModalOpen) return undefined;
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = originalOverflow;
     };
-  }, [showCreateModal]);
+  }, [createFlowModalOpen]);
 
   // Auto-focus name field if empty when modal opens
   useEffect(() => {
@@ -540,6 +616,8 @@ export default function QRWallJoinPage({ api, token }) {
       setModalError(`"${selected[0].name}" exceeds the 10 MB limit.`);
     } else if (selected[0]?.size === 0) {
       setModalError('The selected photo is empty.');
+    } else if (isGifUpload(selected[0])) {
+      setModalError('GIF images are not supported. Choose a JPG, PNG, WebP, AVIF, HEIC, or HEIF photo.');
     } else {
       setFiles(selected);
       setModalError('');
@@ -569,32 +647,28 @@ export default function QRWallJoinPage({ api, token }) {
       return;
     }
 
-    const file = files[0];
     setBusy(true);
-    setUploadProgress('Submitting photo…');
     try {
+      const requestId = createUploadRequestId();
       sessionStorage.setItem('qr-wall-guest-name', name.trim());
-      const response = await api.upload(wallToken, {
+      const queued = await uploadQueue.enqueue({
+        requestId,
         author: name.trim(),
         caption,
-        photos: [file],
+        file: files[0],
       });
-      if (Number(response?.created) !== 1) {
-        throw new Error('The server did not confirm this upload. Check with the moderator before retrying.');
-      }
+      if (!queued) return;
       setFiles([]);
       setCaption('');
       if (fileInputRef.current) fileInputRef.current.value = '';
+      resetCreateSheetMotion();
       setShowCreateModal(false);
-      setMessage('Your photo was submitted for moderator approval. It will appear publicly once approved.');
-      void refreshFirstPage().catch(() => {});
     } catch (err) {
-      const readable = readableUploadError(err);
+      const readable = readableQrWallError(err, 'Could not add this photo to the upload queue. Please try again.');
       setModalError(readable);
       setError(readable);
     } finally {
       setBusy(false);
-      setUploadProgress('');
     }
   };
 
@@ -629,7 +703,7 @@ export default function QRWallJoinPage({ api, token }) {
   };
 
   const closed = event?.status !== 'active';
-  const modalOpen = Boolean(viewerPhoto || showCreateModal);
+  const modalOpen = Boolean(viewerPhoto || showCreateModal || showUploadConfirmation);
 
   return (
     <main className="qrw qrw-mobile">
@@ -648,10 +722,41 @@ export default function QRWallJoinPage({ api, token }) {
           <h1>{event?.title || (loading ? 'Loading moments…' : 'Photo wall')}</h1>
           <p>Every photo has a story. Add yours to the moment.</p></div>
         {error ? <div className="qrw-alert qrw-alert-error" role="alert">{error}</div> : null}
-        {message ? <div className="qrw-alert qrw-alert-success"><CheckCircle2 size={17} /> {message}</div> : null}
         {!loading && !event ? <div className="qrw-alert qrw-alert-error">This QR link is invalid or unavailable.</div> : null}
         {event ? <>
           {closed ? <div className="qrw-alert">This event has ended. You can still browse the photos.</div> : null}
+          {uploadQueue.items.length || uploadQueue.persistenceWarning ? (
+            <section className="qrw-upload-queue" aria-live="polite" aria-label="Photo upload queue">
+              <div className="qrw-upload-queue-head">
+                <span className="qrw-upload-queue-title">
+                  {uploadQueue.summary.activeRequestId ? <LoaderCircle size={16} className="qrw-upload-queue-spinner" /> : null}
+                  <strong>{uploadQueue.summary.label || `${uploadQueue.summary.total} pending upload${uploadQueue.summary.total === 1 ? '' : 's'}`}</strong>
+                </span>
+                {uploadQueue.summary.queued ? <small>{uploadQueue.summary.queued} queued</small> : null}
+              </div>
+              {uploadQueue.persistenceWarning ? <p className="qrw-upload-queue-warning">{uploadQueue.persistenceWarning}</p> : null}
+              {uploadQueue.items.map(item => (
+                <div className={`qrw-upload-queue-item qrw-upload-queue-item--${item.status}`} key={item.requestId}>
+                  <span>
+                    <strong>{item.fileName}</strong>
+                    <small>{item.error || item.progress || 'Queued for upload'}</small>
+                  </span>
+                  <span className="qrw-upload-queue-actions">
+                    {['failed', 'uncertain'].includes(item.status) ? (
+                      <button type="button" onClick={() => uploadQueue.retry(item)}>
+                        <RotateCcw size={14} /> {item.status === 'uncertain' ? 'Check status' : 'Retry'}
+                      </button>
+                    ) : null}
+                    {['queued', 'failed', 'uncertain'].includes(item.status) ? (
+                      <button type="button" onClick={() => uploadQueue.remove(item.requestId)} aria-label={`Remove ${item.fileName} from queue`}>
+                        <Trash2 size={14} />
+                      </button>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+            </section>
+          ) : null}
           {!closed ? (
             <div className="qrw-composer-card">
               <div className="qrw-composer-top">
@@ -879,7 +984,7 @@ export default function QRWallJoinPage({ api, token }) {
                       ref={fileInputRef}
                       className="qrw-visually-hidden"
                       type="file"
-                      accept="image/*,.heic,.heif"
+                      accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif"
                       disabled={busy}
                       onChange={handleFileSelect}
                     />
@@ -923,7 +1028,7 @@ export default function QRWallJoinPage({ api, token }) {
                       ref={fileInputRef}
                       className="qrw-visually-hidden"
                       type="file"
-                      accept="image/*,.heic,.heif"
+                      accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif"
                       disabled={busy}
                       onChange={handleFileSelect}
                     />
@@ -944,7 +1049,9 @@ export default function QRWallJoinPage({ api, token }) {
                   value={caption}
                   disabled={busy}
                   placeholder="Tell us about this moment…"
-                  onChange={e => setCaption(e.target.value)}
+                  onChange={e => {
+                    setCaption(e.target.value);
+                  }}
                 />
               </div>
 
@@ -953,7 +1060,7 @@ export default function QRWallJoinPage({ api, token }) {
                 disabled={busy || !files.length || !name.trim() || !caption.trim()}
                 type="submit"
               >
-                <Send size={16} /> {busy ? (uploadProgress || 'Submitting…') : 'Submit photo for approval'}
+                <Send size={16} /> {busy ? 'Adding to queue…' : 'Submit photo for approval'}
               </button>
 
               <p className="qrw-small-print">
@@ -961,6 +1068,43 @@ export default function QRWallJoinPage({ api, token }) {
               </p>
             </form>
           </div>
+        </div>
+      ) : null}
+
+      {showUploadConfirmation ? (
+        <div
+          className="qrw-upload-confirmation-backdrop"
+          role="presentation"
+          onClick={eventData => {
+            if (eventData.target === eventData.currentTarget) dismissUploadConfirmation();
+          }}
+        >
+          <section
+            ref={uploadConfirmationDialogRef}
+            className="qrw-upload-confirmation"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="qrw-upload-confirmation-title"
+            aria-describedby="qrw-upload-confirmation-description"
+            tabIndex={-1}
+            onClick={eventData => eventData.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="qrw-upload-confirmation-close"
+              onClick={() => dismissUploadConfirmation()}
+              aria-label="Close confirmation"
+            >
+              <X size={16} strokeWidth={1.8} />
+            </button>
+            <span className="qrw-upload-confirmation-icon" aria-hidden="true">
+              <CheckCircle2 size={32} strokeWidth={2.1} />
+            </span>
+            <h2 id="qrw-upload-confirmation-title">Photo submitted</h2>
+            <p id="qrw-upload-confirmation-description">
+              Your photo is waiting for moderator approval. It will appear in the feed once approved.
+            </p>
+          </section>
         </div>
       ) : null}
 

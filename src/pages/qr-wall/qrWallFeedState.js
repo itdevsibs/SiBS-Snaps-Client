@@ -174,6 +174,11 @@ export function prefetchImages(urls) {
 
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // Exactly 10 MiB per individual file
 
+export function isGifUpload(file) {
+  const type = String(file?.type || '').toLowerCase();
+  return type === 'image/gif' || /\.gif$/i.test(String(file?.name || ''));
+}
+
 /**
  * Validates a photo post submission payload before sending to backend.
  */
@@ -191,8 +196,11 @@ export function validatePhotoSubmission({ name, files, caption, maxBytes = MAX_P
   if (file.size === 0) {
     return { valid: false, error: 'The selected photo is empty.' };
   }
-  if (!caption || !caption.trim()) {
-    return { valid: false, error: 'Please enter a caption.' };
+  if (isGifUpload(file)) {
+    return {
+      valid: false,
+      error: 'GIF images are not supported. Choose a JPG, PNG, WebP, AVIF, HEIC, or HEIF photo.',
+    };
   }
   return { valid: true, error: null };
 }

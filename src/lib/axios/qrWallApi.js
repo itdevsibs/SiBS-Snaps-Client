@@ -1,4 +1,6 @@
 /** Public photo wall adapter using the same Axios pattern as SiBS HRIS. */
+import { PHOTO_UPLOAD_TIMEOUT_MS } from '../../pages/qr-wall/qrWallUploadReliability.js';
+
 export function createQrWallApi(http) {
   if (!http?.get || !http?.post || !http?.patch) {
     throw new Error('Pass the existing HRIS Axios instance to createQrWallApi');
@@ -92,14 +94,22 @@ export function createQrWallApi(http) {
     getComments: (token, photoId, before) => request(http.get(
       `${prefix}/public/${safeToken(token)}/photos/${photoId}/comments`, { params: before ? { before } : {} },
     )),
-    upload: (token, { photos, author, caption }) => {
+    upload: (token, { photos, author, caption, requestId, onUploadProgress }) => {
       const body = new FormData();
       body.append('author', author);
       body.append('caption', caption || '');
       photos.forEach(photo => body.append('photos', photo));
       // Let the browser set the multipart boundary. Do not set Content-Type manually.
-      return request(http.post(`${prefix}/public/${safeToken(token)}/photos`, body, { timeout: 120000 }));
+      return request(http.post(`${prefix}/public/${safeToken(token)}/photos`, body, {
+        timeout: PHOTO_UPLOAD_TIMEOUT_MS,
+        headers: { 'X-SiBS-Snaps-Upload-Id': requestId },
+        onUploadProgress,
+      }));
     },
+    uploadStatus: (token, requestId) => request(http.get(
+      `${prefix}/public/${safeToken(token)}/uploads/${encodeURIComponent(requestId)}`,
+      { timeout: 30000 },
+    )),
     comment: (token, photoId, author, body) => request(http.post(
       `${prefix}/public/${safeToken(token)}/photos/${photoId}/comments`, { author, body },
     )),

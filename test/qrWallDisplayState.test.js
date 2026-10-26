@@ -68,6 +68,44 @@ test('ignores unrelated or malformed live events', () => {
   assert.equal(displayState.applyReactionChange?.(photos, { type: 'reaction-added' }), photos);
 });
 
+test('display prefers the smaller feed variant and retains large as fallback', () => {
+  assert.deepEqual(displayState.getDisplayImageCandidates?.({
+    images: { feed: '/photo-feed.webp', large: '/photo-large.webp' },
+  }, '/legacy.jpg'), ['/photo-feed.webp', '/photo-large.webp', '/legacy.jpg']);
+});
+
+test('display falls back when an optimized variant is unavailable', async () => {
+  const requested = [];
+  const blob = new Blob(['optimized-image'], { type: 'image/webp' });
+  const result = await displayState.fetchDisplayImageBlob?.(
+    ['/missing-feed.webp', '/photo-large.webp'],
+    {
+      timeoutMs: 100,
+      fetchImpl: async url => {
+        requested.push(url);
+        return url.includes('missing')
+          ? { ok: false, status: 503, headers: { get: () => 'application/json' } }
+          : { ok: true, status: 200, headers: { get: () => 'image/webp' }, blob: async () => blob };
+      },
+    },
+  );
+
+  assert.deepEqual(requested, ['/missing-feed.webp', '/photo-large.webp']);
+  assert.equal(result.blob, blob);
+  assert.equal(result.url, '/photo-large.webp');
+});
+
+test('display image loading has a bounded timeout instead of stalling autoplay forever', async () => {
+  const started = Date.now();
+  await assert.rejects(displayState.fetchDisplayImageBlob?.(['/hung.webp'], {
+    timeoutMs: 20,
+    fetchImpl: (_url, { signal }) => new Promise((resolve, reject) => {
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    }),
+  }), /timed out/i);
+  assert.ok(Date.now() - started < 250, 'timeout must be bounded');
+});
+
 test('plays the feed Celebrate pop only for a newly added reaction', () => {
   assert.equal(displayState.shouldPlayCelebratePop?.({ reacted: true, alreadyReacted: false }), true);
   assert.equal(displayState.shouldPlayCelebratePop?.({ reacted: true, alreadyReacted: true }), false);
